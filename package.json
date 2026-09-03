@@ -1,0 +1,11 @@
+{
+  "name": "firmen-aufgaben",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Gemeinsame Aufgaben-Pinnwand fuer zwei Personen (Offen / Dran / Erledigt)",
+  "scripts": {
+    "test": "node tests/board.test.mjs",
+    "dev": "python3 -m http.server 4173"
+  }
+}

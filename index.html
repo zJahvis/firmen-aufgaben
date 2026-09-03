@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3d5afe">
+<meta name="robots" content="noindex, nofollow">
+<title>Firmen-Aufgaben</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%233d5afe'/><path d='M26 52l16 16 32-34' stroke='white' stroke-width='11' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<!-- ============ PIN-Anmeldung ============ -->
+<section id="gate" class="gate">
+  <div class="gate-card">
+    <div class="gate-logo">✓</div>
+    <h1>Firmen-Aufgaben</h1>
+    <p class="sub" id="gate-sub">Bitte PIN eingeben</p>
+
+    <form id="pin-form" autocomplete="off">
+      <input id="pin-input" type="password" inputmode="numeric" autocomplete="current-password"
+             placeholder="••••••" aria-label="PIN" maxlength="32">
+      <label class="remember">
+        <input type="checkbox" id="remember" checked>
+        Angemeldet bleiben
+      </label>
+      <div style="margin-top:16px">
+        <button class="btn btn-primary btn-block" type="submit" id="pin-submit">Anmelden</button>
+      </div>
+      <div class="error" id="pin-error" role="alert"></div>
+    </form>
+
+    <div id="gate-setup" class="hidden">
+      <p class="sub" style="margin-top:10px">Diese Pinnwand ist auf diesem Gerät noch nicht eingerichtet.</p>
+      <a class="btn btn-block" href="setup.html">Einrichtung öffnen</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Anwendung ============ -->
+<div id="app" class="hidden">
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><span class="dot">✓</span><span class="name">Firmen-Aufgaben</span></div>
+      <div class="spacer"></div>
+      <button class="who" id="who-chip" title="Wer bin ich?">…</button>
+      <div class="sync" id="sync"><span class="led"></span><span id="sync-text">bereit</span></div>
+      <button class="btn btn-ghost btn-sm" id="logout" title="Abmelden">Sperren</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="banner" class="banner hidden" role="alert"></div>
+
+    <form class="composer" id="new-form">
+      <div class="row">
+        <input id="new-title" type="text" placeholder="Neue Aufgabe …" aria-label="Titel der Aufgabe" required>
+        <button class="btn btn-primary" type="submit">Hinzufügen</button>
+      </div>
+      <div class="more">
+        <input id="new-url" type="text" placeholder="Link (optional) – z. B. example.com/auftrag" aria-label="Link">
+      </div>
+      <div class="hint">Neue Aufgaben landen automatisch in <strong>Offen</strong>.</div>
+    </form>
+
+    <div class="tabs" role="tablist" id="tabs">
+      <button role="tab" data-tab="offen" aria-selected="true">Offen <span class="badge" data-count="offen"></span></button>
+      <button role="tab" data-tab="dran" aria-selected="false">Dran <span class="badge" data-count="dran"></span></button>
+      <button role="tab" data-tab="erledigt" aria-selected="false">Erledigt <span class="badge" data-count="erledigt"></span></button>
+    </div>
+
+    <div class="board" id="board">
+      <section class="column col-offen" data-col="offen">
+        <div class="column-head"><span class="swatch"></span>Offen<span class="count" data-count="offen">0</span></div>
+        <div class="stack" data-stack="offen"></div>
+      </section>
+      <section class="column col-dran" data-col="dran">
+        <div class="column-head"><span class="swatch"></span>Dran<span class="count" data-count="dran">0</span></div>
+        <div class="stack" data-stack="dran"></div>
+      </section>
+      <section class="column col-erledigt" data-col="erledigt">
+        <div class="column-head"><span class="swatch"></span>Erledigt<span class="count" data-count="erledigt">0</span></div>
+        <div class="stack" data-stack="erledigt"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- ============ Dialoge ============ -->
+<dialog id="edit-dialog">
+  <form method="dialog" class="dlg-body" id="edit-form">
+    <h2 id="edit-title">Aufgabe bearbeiten</h2>
+    <div class="field">
+      <label for="edit-name">Titel</label>
+      <input id="edit-name" type="text" required>
+    </div>
+    <div class="field">
+      <label for="edit-url">Link (optional)</label>
+      <input id="edit-url" type="text" placeholder="https://…">
+    </div>
+    <div class="field">
+      <label for="edit-note">Notizen</label>
+      <textarea id="edit-note" placeholder="Was ist der Stand? Was fehlt noch?"></textarea>
+    </div>
+    <div class="dlg-actions">
+      <button class="btn" value="cancel" formnovalidate>Abbrechen</button>
+      <button class="btn btn-primary" value="save" id="edit-save">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="who-dialog">
+  <form method="dialog" class="dlg-body">
+    <h2>Wer bist du?</h2>
+    <p style="margin:0 0 14px;color:var(--text-soft);font-size:14px">
+      Das steht später bei den Aufgaben und Notizen dabei.
+    </p>
+    <div class="dlg-actions" style="justify-content:stretch;flex-direction:column">
+      <button class="btn btn-primary btn-block" value="JAHVIS">Ich bin JAHVIS</button>
+      <button class="btn btn-block" value="Kollege">Ich bin der Kollege</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module" src="assets/app.js"></script>
+</body>
+</html>

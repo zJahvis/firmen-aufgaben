@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3d5afe">
+<meta name="robots" content="noindex, nofollow">
+<title>Einrichtung – Firmen-Aufgaben</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%233d5afe'/><path d='M26 52l16 16 32-34' stroke='white' stroke-width='11' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="setup">
+  <h1>Einrichtung</h1>
+  <p class="lead">
+    Einmalig – danach brauchen beide nur noch den Link und die PIN.
+    Alle Eingaben bleiben in diesem Browser; nichts geht an einen fremden Server.
+  </p>
+
+  <section class="step">
+    <h2><span class="n">1</span> Privates Repository für die Daten anlegen</h2>
+    <ol>
+      <li>
+        <a href="https://github.com/new?name=firmen-aufgaben-data&amp;visibility=private" target="_blank" rel="noopener">
+          Repository anlegen</a> – Name <code>firmen-aufgaben-data</code>, Sichtbarkeit <strong>Private</strong>.
+      </li>
+      <li>Häkchen bei <em>„Add a README file"</em> setzen, damit das Repository nicht leer ist.</li>
+      <li>Auf <em>Create repository</em> klicken.</li>
+    </ol>
+    <p style="font-size:14px;color:var(--text-soft);margin:0">
+      In diesem Repository liegt später die Datei <code>board.json</code> – das ist die Datenbank der Pinnwand.
+    </p>
+  </section>
+
+  <section class="step">
+    <h2><span class="n">2</span> Zugangs-Token erzeugen</h2>
+    <ol>
+      <li>
+        <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">
+          Fine-grained Token anlegen</a>.
+      </li>
+      <li><strong>Token name:</strong> <code>firmen-aufgaben</code></li>
+      <li><strong>Expiration:</strong> möglichst lang (z. B. 1 Jahr oder <em>No expiration</em>).</li>
+      <li><strong>Repository access:</strong> <em>Only select repositories</em> → nur <code>firmen-aufgaben-data</code> auswählen.</li>
+      <li><strong>Permissions → Repository permissions → Contents:</strong> auf <em>Read and write</em> stellen.</li>
+      <li><em>Generate token</em> klicken und den Token (<code>github_pat_…</code>) kopieren.</li>
+    </ol>
+    <p style="font-size:14px;color:var(--text-soft);margin:0">
+      Der Token darf ausschließlich auf dieses eine Repository zugreifen – mehr Rechte braucht die Pinnwand nicht.
+    </p>
+  </section>
+
+  <section class="step">
+    <h2><span class="n">3</span> Zugang erzeugen</h2>
+    <form id="setup-form">
+      <div class="field">
+        <label for="repo">Repository (Besitzer/Name)</label>
+        <input id="repo" type="text" placeholder="benutzername/firmen-aufgaben-data" required>
+      </div>
+      <div class="field">
+        <label for="token">GitHub-Token</label>
+        <input id="token" type="password" placeholder="github_pat_…" autocomplete="off" required>
+      </div>
+      <div class="field">
+        <label for="pin">PIN (mindestens 4 Zeichen, empfohlen 6 Ziffern)</label>
+        <input id="pin" type="password" inputmode="numeric" autocomplete="off" required minlength="4">
+      </div>
+      <div class="field">
+        <label for="pin2">PIN wiederholen</label>
+        <input id="pin2" type="password" inputmode="numeric" autocomplete="off" required minlength="4">
+      </div>
+      <div style="margin-top:16px">
+        <button class="btn btn-primary btn-block" id="go" type="submit">Zugang erzeugen</button>
+      </div>
+      <div class="status" id="status"></div>
+    </form>
+
+    <div class="result hidden" id="result">
+      <p style="margin:0 0 10px;font-weight:600">Fertig. Diesen Link an beide Personen schicken:</p>
+      <textarea id="invite" readonly rows="4"></textarea>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn" id="copy" type="button">Link kopieren</button>
+        <a class="btn btn-primary" id="open" href="#">Pinnwand öffnen</a>
+      </div>
+      <p style="font-size:13.5px;color:var(--text-soft);margin:12px 0 0">
+        Der Link enthält den verschlüsselten Zugang. Ohne die PIN ist er wertlos –
+        schicke PIN und Link deshalb am besten getrennt (z. B. Link per E-Mail, PIN per Telefon).
+        Nach dem ersten Öffnen merkt sich der Browser den Zugang; danach genügt die normale Adresse.
+      </p>
+    </div>
+  </section>
+</div>
+
+<script type="module" src="assets/setup.js"></script>
+</body>
+</html>
