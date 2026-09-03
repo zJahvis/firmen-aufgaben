@@ -1,4 +1,4 @@
-name: Veroeffentlichen (GitHub Pages)
+name: Veroeffentlichen
 
 on:
   push:
@@ -7,41 +7,66 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: veroeffentlichen
+  cancel-in-progress: false
 
 jobs:
   test:
+    name: Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       - name: Logik-Tests
         run: node tests/board.test.mjs
 
-  deploy:
+  publish:
+    name: Auf GitHub Pages veroeffentlichen
     needs: test
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: GitHub Pages einrichten
+
+      - name: GitHub Pages aktivieren (falls noch nicht geschehen)
+        continue-on-error: true
         uses: actions/configure-pages@v5
         with:
           enablement: true
-      - name: Seite hochladen
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-      - name: Veroeffentlichen
-        id: deployment
-        uses: actions/deploy-pages@v4
+
+      - name: Seite auf den Zweig gh-pages schieben
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git push --force origin HEAD:gh-pages
+
+      - name: Pages-Status abfragen
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "--- /pages ---"
+          gh api "repos/${GITHUB_REPOSITORY}/pages" || echo "Pages ist noch nicht aktiviert."
+
+      - name: Live-URL pruefen
+        continue-on-error: true
+        run: |
+          url="https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/"
+          echo "Pruefe $url"
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /tmp/page.html -w '%{http_code}' "$url" || echo 000)
+            echo "Versuch $i: HTTP $code"
+            if [ "$code" = "200" ]; then
+              grep -o '<title>[^<]*</title>' /tmp/page.html || true
+              echo "LIVE: $url"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Seite noch nicht erreichbar – GitHub Pages muss ggf. einmalig unter Settings > Pages aktiviert werden."
