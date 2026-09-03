@@ -1,0 +1,66 @@
+name: Schriften holen
+
+# Laedt Sora und Inter einmalig von einem datenschutzfreundlichen Spiegel
+# (fonts.bunny.net, kein Google) und checkt sie ein, damit die Seite die
+# Schriften selbst ausliefert und keine fremden Server anfragt.
+
+on:
+  push:
+    branches:
+      - claude/firmen-aufgaben-deploy-egkvb3
+    paths:
+      - '.github/workflows/fonts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fonts:
+    name: Schriftdateien einchecken
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/firmen-aufgaben-deploy-egkvb3
+
+      - name: Schriften herunterladen
+        run: |
+          set -euo pipefail
+          mkdir -p assets/fonts
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          url='https://fonts.bunny.net/css?family=inter:400,500%7Csora:700,800&display=swap&subset=latin'
+          curl -fsS -A "$UA" "$url" -o /tmp/bunny.css
+          echo '--- geliefertes CSS ---'
+          cat /tmp/bunny.css
+          grep -oE 'https://[^)"]+\.woff2' /tmp/bunny.css | sort -u > /tmp/urls.txt
+          test -s /tmp/urls.txt
+          echo '--- Dateien ---'
+          while read -r u; do
+            f=$(basename "$u")
+            curl -fsS -A "$UA" "$u" -o "assets/fonts/$f"
+            echo "$f: $(stat -c%s "assets/fonts/$f") Bytes"
+            head -c 4 "assets/fonts/$f" | grep -q wOF2 || { echo "keine woff2-Datei: $f"; exit 1; }
+          done < /tmp/urls.txt
+          {
+            echo '/* Selbst gehostete Schriften – Sora (Ueberschriften) und Inter (Fliesstext).'
+            echo '   Erzeugt von .github/workflows/fonts.yml, nicht von Hand bearbeiten. */'
+            sed -E 's#url\(https?://[^)]*/([^/)]+\.woff2)\)#url("fonts/\1")#g' /tmp/bunny.css
+          } > assets/fonts.css
+          echo '--- assets/fonts.css ---'
+          head -40 assets/fonts.css
+
+      - name: Einchecken
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/fonts assets/fonts.css
+          if git diff --cached --quiet; then
+            echo "Keine Aenderung an den Schriften."
+            exit 0
+          fi
+          git commit -m "Schriften Sora und Inter selbst hosten
+
+          Von fonts.bunny.net geladen und eingecheckt, damit die Seite
+          keine Anfragen an fremde Schriftserver ausloest."
+          git push origin HEAD:claude/firmen-aufgaben-deploy-egkvb3
