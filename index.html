@@ -3,10 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#3d5afe">
+<meta name="theme-color" content="#0A1C1E">
 <meta name="robots" content="noindex, nofollow">
-<title>Firmen-Aufgaben</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%233d5afe'/><path d='M26 52l16 16 32-34' stroke='white' stroke-width='11' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<title>Aufgaben – Winter Media</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='26' fill='%230A1C1E'/><path d='M27 51l16 16 30-33' stroke='%23B09060' stroke-width='10' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<link rel="stylesheet" href="assets/fonts.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -14,8 +15,8 @@
 <!-- ============ PIN-Anmeldung ============ -->
 <section id="gate" class="gate">
   <div class="gate-card">
-    <div class="gate-logo">✓</div>
-    <h1>Firmen-Aufgaben</h1>
+    <p class="eyebrow">Winter Media</p>
+    <h1>Aufgaben</h1>
     <p class="sub" id="gate-sub">Bitte PIN eingeben</p>
 
     <form id="pin-form" autocomplete="off">
@@ -25,14 +26,14 @@
         <input type="checkbox" id="remember" checked>
         Angemeldet bleiben
       </label>
-      <div style="margin-top:16px">
+      <div style="margin-top:18px">
         <button class="btn btn-primary btn-block" type="submit" id="pin-submit">Anmelden</button>
       </div>
       <div class="error" id="pin-error" role="alert"></div>
     </form>
 
     <div id="gate-setup" class="hidden">
-      <p class="sub" style="margin-top:10px">Diese Pinnwand ist auf diesem Gerät noch nicht eingerichtet.</p>
+      <p class="sub" style="margin:14px 0 18px">Diese Pinnwand ist auf diesem Gerät noch nicht eingerichtet.</p>
       <a class="btn btn-block" href="setup.html">Einrichtung öffnen</a>
     </div>
   </div>
@@ -42,11 +43,23 @@
 <div id="app" class="hidden">
   <header class="topbar">
     <div class="topbar-inner">
-      <div class="brand"><span class="dot">✓</span><span class="name">Firmen-Aufgaben</span></div>
+      <div class="brand">
+        <span class="brand-dot" aria-hidden="true"></span>
+        <span class="brand-name">Winter Media</span>
+        <span class="brand-sep" aria-hidden="true"></span>
+        <span class="brand-sub">Aufgaben</span>
+      </div>
       <div class="spacer"></div>
       <button class="who" id="who-chip" title="Wer bin ich?">…</button>
       <div class="sync" id="sync"><span class="led"></span><span id="sync-text">bereit</span></div>
-      <button class="btn btn-ghost btn-sm" id="logout" title="Abmelden" aria-label="Sperren"><span aria-hidden="true">🔒</span><span class="lbl">Sperren</span></button>
+      <button class="btn btn-sm" id="logout" title="Abmelden" aria-label="Sperren">
+        <svg class="ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="4.5" y="10.5" width="15" height="9.5" rx="3"></rect>
+          <path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"></path>
+        </svg>
+        <span class="lbl">Sperren</span>
+      </button>
     </div>
   </header>
 
@@ -54,14 +67,13 @@
     <div id="banner" class="banner hidden" role="alert"></div>
 
     <form class="composer" id="new-form">
-      <div class="row">
-        <input id="new-title" type="text" placeholder="Neue Aufgabe …" aria-label="Titel der Aufgabe" required>
+      <p class="eyebrow">Neue Aufgabe</p>
+      <div class="composer-grid">
+        <input id="new-title" type="text" placeholder="Was ist zu tun?" aria-label="Titel der Aufgabe" required>
+        <input id="new-url" type="text" placeholder="Link (optional) – z. B. example.com/auftrag" aria-label="Link">
         <button class="btn btn-primary" type="submit">Hinzufügen</button>
       </div>
-      <div class="more">
-        <input id="new-url" type="text" placeholder="Link (optional) – z. B. example.com/auftrag" aria-label="Link">
-      </div>
-      <div class="hint">Neue Aufgaben landen automatisch in <strong>Offen</strong>.</div>
+      <p class="hint">Neue Aufgaben landen automatisch in <strong>Offen</strong>.</p>
     </form>
 
     <div class="tabs" role="tablist" id="tabs">
@@ -71,16 +83,16 @@
     </div>
 
     <div class="board" id="board">
-      <section class="column col-offen" data-col="offen">
-        <div class="column-head"><span class="swatch"></span>Offen<span class="count" data-count="offen">0</span></div>
+      <section class="column" data-col="offen">
+        <div class="column-head"><span class="eyebrow">Offen</span><span class="count" data-count="offen">0</span></div>
         <div class="stack" data-stack="offen"></div>
       </section>
-      <section class="column col-dran" data-col="dran">
-        <div class="column-head"><span class="swatch"></span>Dran<span class="count" data-count="dran">0</span></div>
+      <section class="column" data-col="dran">
+        <div class="column-head"><span class="eyebrow">Dran</span><span class="count" data-count="dran">0</span></div>
         <div class="stack" data-stack="dran"></div>
       </section>
-      <section class="column col-erledigt" data-col="erledigt">
-        <div class="column-head"><span class="swatch"></span>Erledigt<span class="count" data-count="erledigt">0</span></div>
+      <section class="column" data-col="erledigt">
+        <div class="column-head"><span class="eyebrow">Erledigt</span><span class="count" data-count="erledigt">0</span></div>
         <div class="stack" data-stack="erledigt"></div>
       </section>
     </div>
@@ -113,10 +125,8 @@
 <dialog id="who-dialog">
   <form method="dialog" class="dlg-body">
     <h2>Wer bist du?</h2>
-    <p style="margin:0 0 14px;color:var(--text-soft);font-size:14px">
-      Das steht später bei den Aufgaben und Notizen dabei.
-    </p>
-    <div class="dlg-actions" style="justify-content:stretch;flex-direction:column">
+    <p class="dlg-note">Das steht später bei den Aufgaben und Notizen dabei.</p>
+    <div class="dlg-actions" style="flex-direction:column;align-items:stretch">
       <button class="btn btn-primary btn-block" value="JAHVIS">Ich bin JAHVIS</button>
       <button class="btn btn-block" value="Kollege">Ich bin der Kollege</button>
     </div>

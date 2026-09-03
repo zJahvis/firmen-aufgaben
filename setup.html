@@ -3,22 +3,37 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#3d5afe">
+<meta name="theme-color" content="#0A1C1E">
 <meta name="robots" content="noindex, nofollow">
-<title>Einrichtung – Firmen-Aufgaben</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%233d5afe'/><path d='M26 52l16 16 32-34' stroke='white' stroke-width='11' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<title>Einrichtung – Winter Media Aufgaben</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='26' fill='%230A1C1E'/><path d='M27 51l16 16 30-33' stroke='%23B09060' stroke-width='10' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<link rel="stylesheet" href="assets/fonts.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
+
+<header class="setup-top">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span class="brand-name">Winter Media</span>
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-sub">Aufgaben</span>
+    </div>
+  </div>
+</header>
+
 <div class="setup">
+  <p class="eyebrow">Einmalig</p>
   <h1>Einrichtung</h1>
   <p class="lead">
-    Einmalig – danach brauchen beide nur noch den Link und die PIN.
+    Danach brauchen beide nur noch den Link und die PIN.
     Alle Eingaben bleiben in diesem Browser; nichts geht an einen fremden Server.
   </p>
 
   <section class="step">
-    <h2><span class="n">1</span> Privates Repository für die Daten anlegen</h2>
+    <p class="eyebrow">Schritt 1</p>
+    <h2>Privates Repository für die Daten anlegen</h2>
     <ol>
       <li>
         <a href="https://github.com/new?name=firmen-aufgaben-data&amp;visibility=private" target="_blank" rel="noopener">
@@ -27,13 +42,14 @@
       <li>Häkchen bei <em>„Add a README file"</em> setzen, damit das Repository nicht leer ist.</li>
       <li>Auf <em>Create repository</em> klicken.</li>
     </ol>
-    <p style="font-size:14px;color:var(--text-soft);margin:0">
+    <p class="aside">
       In diesem Repository liegt später die Datei <code>board.json</code> – das ist die Datenbank der Pinnwand.
     </p>
   </section>
 
   <section class="step">
-    <h2><span class="n">2</span> Zugangs-Token erzeugen</h2>
+    <p class="eyebrow">Schritt 2</p>
+    <h2>Zugangs-Token erzeugen</h2>
     <ol>
       <li>
         <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">
@@ -45,13 +61,14 @@
       <li><strong>Permissions → Repository permissions → Contents:</strong> auf <em>Read and write</em> stellen.</li>
       <li><em>Generate token</em> klicken und den Token (<code>github_pat_…</code>) kopieren.</li>
     </ol>
-    <p style="font-size:14px;color:var(--text-soft);margin:0">
+    <p class="aside">
       Der Token darf ausschließlich auf dieses eine Repository zugreifen – mehr Rechte braucht die Pinnwand nicht.
     </p>
   </section>
 
   <section class="step">
-    <h2><span class="n">3</span> Zugang erzeugen</h2>
+    <p class="eyebrow">Schritt 3</p>
+    <h2>Zugang erzeugen</h2>
     <form id="setup-form">
       <div class="field">
         <label for="repo">Repository (Besitzer/Name)</label>
@@ -69,20 +86,20 @@
         <label for="pin2">PIN wiederholen</label>
         <input id="pin2" type="password" inputmode="numeric" autocomplete="off" required minlength="4">
       </div>
-      <div style="margin-top:16px">
+      <div style="margin-top:20px">
         <button class="btn btn-primary btn-block" id="go" type="submit">Zugang erzeugen</button>
       </div>
       <div class="status" id="status"></div>
     </form>
 
     <div class="result hidden" id="result">
-      <p style="margin:0 0 10px;font-weight:600">Fertig. Diesen Link an beide Personen schicken:</p>
+      <p class="head">Fertig. Diesen Link an beide Personen schicken:</p>
       <textarea id="invite" readonly rows="4"></textarea>
-      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <div class="row">
         <button class="btn" id="copy" type="button">Link kopieren</button>
         <a class="btn btn-primary" id="open" href="#">Pinnwand öffnen</a>
       </div>
-      <p style="font-size:13.5px;color:var(--text-soft);margin:12px 0 0">
+      <p class="aside">
         Der Link enthält den verschlüsselten Zugang. Ohne die PIN ist er wertlos –
         schicke PIN und Link deshalb am besten getrennt (z. B. Link per E-Mail, PIN per Telefon).
         Nach dem ersten Öffnen merkt sich der Browser den Zugang; danach genügt die normale Adresse.

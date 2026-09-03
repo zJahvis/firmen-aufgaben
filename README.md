@@ -18,6 +18,7 @@ und ohne einen einzigen kostenpflichtigen Dienst.
 | Hosting | GitHub Pages (kostenlos, öffentliche URL) |
 | Datenspeicher | `board.json` in einem **privaten** GitHub-Repository, geschrieben über die GitHub Contents API |
 | Zugangsschutz | Ein gemeinsamer PIN. Der Repository-Token liegt nur AES-GCM-verschlüsselt vor (PBKDF2-SHA256, 600 000 Runden) |
+| Gestaltung | Hausfarben von Winter Media, Sora für Überschriften, Inter für den Fließtext – beide selbst gehostet |
 | Kosten | 0 € – GitHub Pages und GitHub-Repositories sind im kostenlosen Tarif enthalten |
 
 Die Daten liegen also serverseitig und versioniert (jede Änderung ist ein Commit),
@@ -89,6 +90,20 @@ Beides läuft bei jedem Push automatisch; danach wird der Stand auf den Zweig
 
 Es gibt keinen Build-Schritt: was im Repository liegt, wird ausgeliefert.
 
+### Gestaltung
+
+Die Oberfläche folgt den Hausfarben von Winter Media: Dunkelgrün `#0A1C1E` für
+Navigation und Text, Gold `#B09060` ausschließlich als Akzent (Schaltflächen,
+aktive Zustände, Kicker-Punkt), Off-White `#F4F1EC` als Fläche und Petrol
+`#12333A` für Karten in der dunklen Ansicht. Farben stehen durchgängig als
+HEX-Werte in `:root`; die dunkle Ansicht greift sowohl über
+`prefers-color-scheme` als auch über `[data-theme="dark"]`.
+
+Sora (700/800) und Inter (400/500) liegen als woff2 im Repository und werden
+von der Seite selbst ausgeliefert – es geht keine Anfrage an einen fremden
+Schriftserver. Aktualisiert werden sie über den Workflow
+`.github/workflows/fonts.yml`, der `tools/build-fonts.py` benutzt.
+
 ### Dateien
 
 ```
@@ -99,5 +114,8 @@ assets/board.js   Datenmodell und Merge-Logik (ohne DOM, testbar)
 assets/store.js   GitHub Contents API als Datenspeicher
 assets/crypto.js  PBKDF2 + AES-GCM
 assets/style.css  Gestaltung, hell und dunkel
+assets/fonts.css  selbst gehostete Schriften (erzeugt, nicht von Hand ändern)
+assets/fonts/     Sora und Inter als woff2
+tools/            Aufbereitung des Schrift-CSS
 tests/            Tests für board.js
 ```

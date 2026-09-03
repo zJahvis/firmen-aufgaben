@@ -27,28 +27,27 @@ jobs:
       - name: Schriften herunterladen
         run: |
           set -euo pipefail
-          mkdir -p assets/fonts
           UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          url='https://fonts.bunny.net/css?family=inter:400,500%7Csora:700,800&display=swap&subset=latin'
-          curl -fsS -A "$UA" "$url" -o /tmp/bunny.css
-          echo '--- geliefertes CSS ---'
-          cat /tmp/bunny.css
-          grep -oE 'https://[^)"]+\.woff2' /tmp/bunny.css | sort -u > /tmp/urls.txt
-          test -s /tmp/urls.txt
-          echo '--- Dateien ---'
+          url='https://fonts.bunny.net/css?family=inter:400,500%7Csora:700,800&display=swap'
+          curl -fsS -A "$UA" "$url" -o /tmp/geliefert.css
+
+          python3 tools/build-fonts.py /tmp/geliefert.css assets/fonts.css > /tmp/quellen.txt
+          test -s /tmp/quellen.txt
+
+          rm -rf assets/fonts && mkdir -p assets/fonts
           while read -r u; do
             f=$(basename "$u")
             curl -fsS -A "$UA" "$u" -o "assets/fonts/$f"
-            echo "$f: $(stat -c%s "assets/fonts/$f") Bytes"
             head -c 4 "assets/fonts/$f" | grep -q wOF2 || { echo "keine woff2-Datei: $f"; exit 1; }
-          done < /tmp/urls.txt
-          {
-            echo '/* Selbst gehostete Schriften – Sora (Ueberschriften) und Inter (Fliesstext).'
-            echo '   Erzeugt von .github/workflows/fonts.yml, nicht von Hand bearbeiten. */'
-            sed -E 's#url\(https?://[^)]*/([^/)]+\.woff2)\)#url("fonts/\1")#g' /tmp/bunny.css
-          } > assets/fonts.css
+            echo "$f: $(stat -c%s "assets/fonts/$f") Bytes"
+          done < /tmp/quellen.txt
+
+          if grep -q 'https\?://' assets/fonts.css; then
+            echo '::error::Im Schrift-CSS steht noch eine fremde Adresse.'
+            exit 1
+          fi
           echo '--- assets/fonts.css ---'
-          head -40 assets/fonts.css
+          cat assets/fonts.css
 
       - name: Einchecken
         run: |

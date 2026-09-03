@@ -235,7 +235,24 @@ function renderCard(task) {
       a.href = task.url;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
-      a.textContent = '🔗 ' + task.url.replace(/^https?:\/\//, '');
+      const mark = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      mark.setAttribute('class', 'link-mark');
+      mark.setAttribute('viewBox', '0 0 24 24');
+      mark.setAttribute('width', '13');
+      mark.setAttribute('height', '13');
+      mark.setAttribute('aria-hidden', 'true');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M8 16 16 8M9 8h7v7');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', 'currentColor');
+      path.setAttribute('stroke-width', '2');
+      path.setAttribute('stroke-linecap', 'round');
+      path.setAttribute('stroke-linejoin', 'round');
+      mark.append(path);
+      const text = document.createElement('span');
+      text.className = 'link-text';
+      text.textContent = task.url.replace(/^https?:\/\//, '');
+      a.append(mark, text);
       card.append(a);
     } else {
       const span = document.createElement('div');
@@ -275,16 +292,16 @@ function renderCard(task) {
   };
 
   if (task.status === 'offen') {
-    add(actions, '▶ Dran', 'btn-primary', () => setStatus(task.id, 'dran'));
-    add(actions, '✓ Erledigt', '', () => setStatus(task.id, 'erledigt'));
+    add(actions, 'Dran', 'btn-primary', () => setStatus(task.id, 'dran'));
+    add(actions, 'Erledigt', '', () => setStatus(task.id, 'erledigt'));
   } else if (task.status === 'dran') {
-    add(actions, '✓ Erledigt', 'btn-primary', () => setStatus(task.id, 'erledigt'));
-    add(actions, '← Offen', '', () => setStatus(task.id, 'offen'));
+    add(actions, 'Erledigt', 'btn-primary', () => setStatus(task.id, 'erledigt'));
+    add(actions, 'Zurück zu Offen', '', () => setStatus(task.id, 'offen'));
   } else {
-    add(actions, '↩ Wieder öffnen', '', () => setStatus(task.id, 'dran'));
+    add(actions, 'Wieder öffnen', '', () => setStatus(task.id, 'dran'));
   }
 
-  add(more, task.note.trim() ? '✎ Notiz' : '+ Notiz', 'btn-ghost', () => openEdit(task.id, true));
+  add(more, task.note.trim() ? 'Notiz ändern' : 'Notiz', 'btn-ghost', () => openEdit(task.id, true));
   add(more, 'Bearbeiten', 'btn-ghost', () => openEdit(task.id, false));
   add(more, 'Löschen', 'btn-ghost btn-danger', () => removeTask(task.id));
 
