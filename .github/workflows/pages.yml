@@ -49,16 +49,24 @@ jobs:
 
       - name: Live-URL pruefen
         run: |
+          set -uo pipefail
           url="https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/"
-          echo "Pruefe $url"
-          for i in $(seq 1 20); do
-            code=$(curl -s -o /tmp/page.html -w '%{http_code}' "$url" || echo 000)
-            echo "Versuch $i: HTTP $code"
-            if [ "$code" = "200" ] && grep -q '<title>Firmen-Aufgaben</title>' /tmp/page.html; then
-              echo "LIVE: $url"
+          soll=$(sha256sum index.html | cut -d' ' -f1)
+          echo "Pruefe $url gegen index.html ($soll)"
+          for i in $(seq 1 24); do
+            code=$(curl -s -o /tmp/live.html -w '%{http_code}' "$url" || echo 000)
+            ist=$(sha256sum /tmp/live.html | cut -d' ' -f1)
+            echo "Versuch $i: HTTP $code, ausgeliefert $ist"
+            if [ "$code" = "200" ] && [ "$ist" = "$soll" ]; then
+              css=$(curl -s -o /dev/null -w '%{http_code}' "${url}assets/style.css")
+              font=$(curl -s -o /dev/null -w '%{http_code}' "${url}assets/fonts/sora-latin-800-normal.woff2")
+              setup=$(curl -s -o /dev/null -w '%{http_code}' "${url}setup.html")
+              echo "style.css $css, Sora $font, setup.html $setup"
+              [ "$css$font$setup" = "200200200" ] || { echo "::error::Eine Datei fehlt."; exit 1; }
+              echo "LIVE und aktuell: $url"
               exit 0
             fi
             sleep 15
           done
-          echo "::error::Seite unter $url nicht erreichbar."
+          echo "::error::Unter $url wird nicht der aktuelle Stand ausgeliefert."
           exit 1
