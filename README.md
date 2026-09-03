@@ -77,8 +77,15 @@ neuen Link verteilen. Bestehende Aufgaben bleiben dabei erhalten.
 
 ```bash
 npm test          # Logik-Tests (Zusammenführen, Datenmodell)
+npm run test:e2e  # Oberflächentests in Chromium (benötigt playwright)
 npm run dev       # lokaler Server auf http://localhost:4173
 ```
+
+Die Oberflächentests starten die echte Seite in Chromium und ersetzen nur die
+GitHub-API durch einen Speicher im Arbeitsspeicher – Anmeldung, Anlegen,
+Verschieben, Notizen, Abgleich und beide Bildschirmgrößen werden dabei geprüft.
+Beides läuft bei jedem Push automatisch; danach wird der Stand auf den Zweig
+`gh-pages` veröffentlicht und die Live-URL geprüft.
 
 Es gibt keinen Build-Schritt: was im Repository liegt, wird ausgeliefert.
 

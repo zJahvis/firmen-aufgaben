@@ -263,31 +263,32 @@ function renderCard(task) {
 
   const actions = document.createElement('div');
   actions.className = 'actions';
-  const add = (label, cls, fn, title) => {
+  const more = document.createElement('div');
+  more.className = 'actions actions-more';
+
+  const add = (row, label, cls, fn) => {
     const b = document.createElement('button');
     b.className = `btn btn-sm ${cls}`;
     b.textContent = label;
-    if (title) b.title = title;
     b.addEventListener('click', fn);
-    actions.append(b);
-    return b;
+    row.append(b);
   };
 
   if (task.status === 'offen') {
-    add('▶ Dran', 'btn-primary', () => setStatus(task.id, 'dran'));
-    add('✓ Erledigt', '', () => setStatus(task.id, 'erledigt'));
+    add(actions, '▶ Dran', 'btn-primary', () => setStatus(task.id, 'dran'));
+    add(actions, '✓ Erledigt', '', () => setStatus(task.id, 'erledigt'));
   } else if (task.status === 'dran') {
-    add('✓ Erledigt', 'btn-primary', () => setStatus(task.id, 'erledigt'));
-    add('← Offen', '', () => setStatus(task.id, 'offen'));
+    add(actions, '✓ Erledigt', 'btn-primary', () => setStatus(task.id, 'erledigt'));
+    add(actions, '← Offen', '', () => setStatus(task.id, 'offen'));
   } else {
-    add('↩ Wieder öffnen', '', () => setStatus(task.id, 'dran'));
+    add(actions, '↩ Wieder öffnen', '', () => setStatus(task.id, 'dran'));
   }
 
-  add(task.note.trim() ? '✎ Notiz' : '+ Notiz', 'btn-ghost', () => openEdit(task.id, true));
-  add('Bearbeiten', 'btn-ghost', () => openEdit(task.id, false));
-  add('Löschen', 'btn-ghost btn-danger', () => removeTask(task.id));
+  add(more, task.note.trim() ? '✎ Notiz' : '+ Notiz', 'btn-ghost', () => openEdit(task.id, true));
+  add(more, 'Bearbeiten', 'btn-ghost', () => openEdit(task.id, false));
+  add(more, 'Löschen', 'btn-ghost btn-danger', () => removeTask(task.id));
 
-  card.append(actions);
+  card.append(actions, more);
   return card;
 }
 

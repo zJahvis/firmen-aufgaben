@@ -5,6 +5,10 @@ import { emptyBoard, sanitizeBoard } from './board.js';
 const $ = (s) => document.querySelector(s);
 const status = $('#status');
 
+// Auf <benutzer>.github.io ist der Besitzer bereits bekannt – Feld vorbelegen.
+const ownerFromHost = location.hostname.match(/^([\w-]+)\.github\.io$/i)?.[1];
+if (ownerFromHost) $('#repo').value = `${ownerFromHost}/firmen-aufgaben-data`;
+
 function setStatus(text, kind = '') {
   status.textContent = text;
   status.className = 'status ' + kind;

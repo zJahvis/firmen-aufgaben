@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: veroeffentlichen
@@ -24,8 +22,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+
       - name: Logik-Tests
         run: node tests/board.test.mjs
+
+      - name: Chromium bereitstellen
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Oberflaechentests
+        run: node tests/e2e.test.mjs
 
   publish:
     name: Auf GitHub Pages veroeffentlichen
@@ -34,39 +41,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: GitHub Pages aktivieren (falls noch nicht geschehen)
-        continue-on-error: true
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
       - name: Seite auf den Zweig gh-pages schieben
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git push --force origin HEAD:gh-pages
 
-      - name: Pages-Status abfragen
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "--- /pages ---"
-          gh api "repos/${GITHUB_REPOSITORY}/pages" || echo "Pages ist noch nicht aktiviert."
-
       - name: Live-URL pruefen
-        continue-on-error: true
         run: |
           url="https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/"
           echo "Pruefe $url"
           for i in $(seq 1 20); do
             code=$(curl -s -o /tmp/page.html -w '%{http_code}' "$url" || echo 000)
             echo "Versuch $i: HTTP $code"
-            if [ "$code" = "200" ]; then
-              grep -o '<title>[^<]*</title>' /tmp/page.html || true
+            if [ "$code" = "200" ] && grep -q '<title>Firmen-Aufgaben</title>' /tmp/page.html; then
               echo "LIVE: $url"
               exit 0
             fi
             sleep 15
           done
-          echo "Seite noch nicht erreichbar – GitHub Pages muss ggf. einmalig unter Settings > Pages aktiviert werden."
+          echo "::error::Seite unter $url nicht erreichbar."
+          exit 1

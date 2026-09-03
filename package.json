@@ -6,6 +6,7 @@
   "description": "Gemeinsame Aufgaben-Pinnwand fuer zwei Personen (Offen / Dran / Erledigt)",
   "scripts": {
     "test": "node tests/board.test.mjs",
+    "test:e2e": "node tests/e2e.test.mjs",
     "dev": "python3 -m http.server 4173"
   }
 }
