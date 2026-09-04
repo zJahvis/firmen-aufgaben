@@ -3,20 +3,35 @@ import { GithubStore, ConflictError, AuthError } from './store.js';
 import {
   STATES, emptyBoard, createTask, mergeBoards, sanitizeBoard, visibleTasks,
   touch, normalizeUrl, isSafeLink,
+  PRIORITY_LABELS, DEFAULT_PRIORITY, normalizePriority,
+  SORT_MODES, DEFAULT_SORT,
 } from './board.js';
 
 const LS_CONFIG = 'fa.config';   // verschlüsseltes Zugangspaket
 const LS_SESSION = 'fa.session'; // entschlüsselt, solange „angemeldet bleiben"
 const LS_ME = 'fa.me';
 const LS_CACHE = 'fa.cache';
+const LS_SORT = 'fa.sort';
 const POLL_MS = 10000;
 
 const $ = (sel) => document.querySelector(sel);
+
+/** Liest bzw. setzt eine Auswahlgruppe (Wichtigkeit, Sortierung). */
+function readChoice(name, fallback) {
+  const picked = document.querySelector(`input[name="${name}"]:checked`);
+  return picked ? picked.value : fallback;
+}
+
+function setChoice(name, value) {
+  const target = document.querySelector(`input[name="${name}"][value="${value}"]`);
+  if (target) target.checked = true;
+}
 
 const state = {
   board: emptyBoard(),
   sha: null,
   tab: 'offen',
+  sort: SORT_MODES.includes(localStorage.getItem(LS_SORT)) ? localStorage.getItem(LS_SORT) : DEFAULT_SORT,
   me: localStorage.getItem(LS_ME) || '',
   store: null,
 };
@@ -99,6 +114,7 @@ function start(cfg) {
 
   wireUi();
   updateWhoChip();
+  setChoice('sort', state.sort);
   render();
 
   if (!state.me) askWho();
@@ -118,13 +134,27 @@ function wireUi() {
     ev.preventDefault();
     const title = $('#new-title').value.trim();
     if (!title) return;
-    const task = createTask({ title, url: $('#new-url').value, author: state.me || 'Unbekannt' });
+    const task = createTask({
+      title,
+      url: $('#new-url').value,
+      author: state.me || 'Unbekannt',
+      priority: readChoice('new-prio', DEFAULT_PRIORITY),
+    });
     state.board = { ...state.board, tasks: [...state.board.tasks, task] };
     $('#new-title').value = '';
     $('#new-url').value = '';
+    setChoice('new-prio', DEFAULT_PRIORITY);
     $('#new-title').focus();
     cacheAndRender();
     scheduleSave();
+  });
+
+  $('#sort-row').addEventListener('change', (ev) => {
+    const mode = ev.target.value;
+    if (!SORT_MODES.includes(mode)) return;
+    state.sort = mode;
+    localStorage.setItem(LS_SORT, mode);
+    render();
   });
 
   $('#tabs').addEventListener('click', (ev) => {
@@ -194,7 +224,7 @@ function relativeDate(iso) {
 function render() {
   for (const status of STATES) {
     const stack = document.querySelector(`[data-stack="${status}"]`);
-    const tasks = visibleTasks(state.board, status);
+    const tasks = visibleTasks(state.board, status, state.sort);
     stack.replaceChildren(
       ...(tasks.length ? tasks.map(renderCard) : [emptyHint(status)])
     );
@@ -223,6 +253,12 @@ function emptyHint(status) {
 function renderCard(task) {
   const card = document.createElement('article');
   card.className = `card s-${task.status}`;
+
+  const priority = normalizePriority(task.priority);
+  const prio = document.createElement('p');
+  prio.className = `prio prio-${priority}`;
+  prio.textContent = PRIORITY_LABELS[priority];
+  card.append(prio);
 
   const h = document.createElement('h3');
   h.textContent = task.title || '(ohne Titel)';
@@ -342,6 +378,7 @@ function openEdit(id, focusNote) {
   $('#edit-name').value = task.title;
   $('#edit-url').value = task.url;
   $('#edit-note').value = task.note;
+  setChoice('edit-prio', normalizePriority(task.priority));
   $('#edit-title').textContent = focusNote ? 'Notiz' : 'Aufgabe bearbeiten';
   const dlg = $('#edit-dialog');
   dlg.showModal();
@@ -359,6 +396,7 @@ function onEditClose(ev) {
     title,
     url: normalizeUrl($('#edit-url').value),
     note: $('#edit-note').value,
+    priority: readChoice('edit-prio', DEFAULT_PRIORITY),
   });
   editingId = null;
 }

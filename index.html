@@ -71,15 +71,37 @@
       <div class="composer-grid">
         <input id="new-title" type="text" placeholder="Was ist zu tun?" aria-label="Titel der Aufgabe" required>
         <input id="new-url" type="text" placeholder="Link (optional) – z. B. example.com/auftrag" aria-label="Link">
+        <div class="choice-row" id="new-prio-row">
+          <span class="choice-label">Wichtigkeit</span>
+        <div class="seg" role="radiogroup" aria-label="Wichtigkeit">
+          <input type="radio" name="new-prio" id="new-prio-hoch" value="hoch">
+          <label for="new-prio-hoch">Hoch</label>
+          <input type="radio" name="new-prio" id="new-prio-mittel" value="mittel" checked>
+          <label for="new-prio-mittel">Mittel</label>
+          <input type="radio" name="new-prio" id="new-prio-niedrig" value="niedrig">
+          <label for="new-prio-niedrig">Niedrig</label>
+        </div>
+        </div>
         <button class="btn btn-primary" type="submit">Hinzufügen</button>
       </div>
       <p class="hint">Neue Aufgaben landen automatisch in <strong>Offen</strong>.</p>
     </form>
 
-    <div class="tabs" role="tablist" id="tabs">
-      <button role="tab" data-tab="offen" aria-selected="true">Offen <span class="badge" data-count="offen"></span></button>
-      <button role="tab" data-tab="dran" aria-selected="false">Dran <span class="badge" data-count="dran"></span></button>
-      <button role="tab" data-tab="erledigt" aria-selected="false">Erledigt <span class="badge" data-count="erledigt"></span></button>
+    <div class="boardbar">
+      <div class="tabs" role="tablist" id="tabs">
+        <button role="tab" data-tab="offen" aria-selected="true">Offen <span class="badge" data-count="offen"></span></button>
+        <button role="tab" data-tab="dran" aria-selected="false">Dran <span class="badge" data-count="dran"></span></button>
+        <button role="tab" data-tab="erledigt" aria-selected="false">Erledigt <span class="badge" data-count="erledigt"></span></button>
+      </div>
+      <div class="choice-row" id="sort-row">
+        <span class="choice-label">Sortierung</span>
+        <div class="seg" role="radiogroup" aria-label="Sortierung">
+          <input type="radio" name="sort" id="sort-wichtigkeit" value="wichtigkeit" checked>
+          <label for="sort-wichtigkeit">Nach Wichtigkeit</label>
+          <input type="radio" name="sort" id="sort-datum" value="datum">
+          <label for="sort-datum">Nach Datum</label>
+        </div>
+      </div>
     </div>
 
     <div class="board" id="board">
@@ -114,6 +136,17 @@
     <div class="field">
       <label for="edit-note">Notizen</label>
       <textarea id="edit-note" placeholder="Was ist der Stand? Was fehlt noch?"></textarea>
+    </div>
+    <div class="field">
+      <label id="edit-prio-label">Wichtigkeit</label>
+      <div class="seg seg-wide" role="radiogroup" aria-labelledby="edit-prio-label">
+        <input type="radio" name="edit-prio" id="edit-prio-hoch" value="hoch">
+        <label for="edit-prio-hoch">Hoch</label>
+        <input type="radio" name="edit-prio" id="edit-prio-mittel" value="mittel" checked>
+        <label for="edit-prio-mittel">Mittel</label>
+        <input type="radio" name="edit-prio" id="edit-prio-niedrig" value="niedrig">
+        <label for="edit-prio-niedrig">Niedrig</label>
+      </div>
     </div>
     <div class="dlg-actions">
       <button class="btn" value="cancel" formnovalidate>Abbrechen</button>

@@ -8,6 +8,8 @@ und ohne einen einzigen kostenpflichtigen Dienst.
 * **JAHVIS** arbeitet sie ab, schreibt Notizen dazu und hakt sie ab.
 * Beide sehen dieselbe Pinnwand, auf jedem Gerät, in Echtzeit (Abgleich alle 10 Sekunden).
 
+Jede Aufgabe hat zusätzlich eine **Wichtigkeit**: *Hoch*, *Mittel* oder *Niedrig*.
+
 ---
 
 ## Wie es aufgebaut ist
@@ -24,6 +26,28 @@ und ohne einen einzigen kostenpflichtigen Dienst.
 Die Daten liegen also serverseitig und versioniert (jede Änderung ist ein Commit),
 nicht nur im Browser-Speicher. Der `localStorage` dient ausschließlich als
 Zwischenspeicher, damit die Pinnwand sofort sichtbar ist.
+
+### Wichtigkeit
+
+Jede Aufgabe trägt das Feld `priority` mit den Werten `hoch`, `mittel` oder
+`niedrig`; ohne Auswahl gilt **Mittel**. Gewählt wird sie beim Anlegen und
+jederzeit über *Bearbeiten*. Auf der Karte steht sie als kleine Marke – *Hoch*
+in Gold, *Mittel* und *Niedrig* zurückhaltend.
+
+Die Sortierung lässt sich über der Pinnwand umschalten:
+
+* **Nach Wichtigkeit** (Voreinstellung) – Hoch vor Mittel vor Niedrig, bei
+  gleicher Wichtigkeit entscheidet die Zeit.
+* **Nach Datum** – wie zuvor nach Anlage- bzw. Erledigungszeit.
+
+Die Sortierung gilt innerhalb jeder Spalte; **Offen**, **Dran** und **Erledigt**
+bleiben als Status erhalten und greifen mit der Sortierung zusammen. Die Wahl
+merkt sich der jeweilige Browser, sie verändert die gespeicherten Daten nicht:
+`board.json` wird immer in derselben Reihenfolge geschrieben, damit nicht jeder
+Nutzer die Datei neu schreibt, nur weil er anders sortiert.
+
+Aufgaben aus der Zeit vor dieser Erweiterung haben kein `priority`-Feld; sie
+werden beim Laden als *Mittel* behandelt. Es ist keine Migration nötig.
 
 ### Gleichzeitiges Arbeiten
 

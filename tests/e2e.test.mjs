@@ -79,6 +79,9 @@ async function waitFor(cond, was, ms = 20000) {
 
 const board = () => JSON.parse(fake.file || '{"tasks":[]}');
 const titled = (t) => board().tasks.find((x) => x.title === t);
+const titles = (page, stack) => page.locator(`[data-stack="${stack}"] .card h3`).allTextContents();
+const karte = (page, stack, teil) =>
+  page.locator(`[data-stack="${stack}"] .card`).filter({ hasText: teil });
 
 const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || undefined });
 
@@ -134,6 +137,11 @@ try {
     assert.equal(t.url, 'https://example.com/auftrag/17');
     assert.equal(t.status, 'offen');
     assert.equal(t.author, 'JAHVIS');
+    assert.equal(t.priority, 'mittel', 'ohne Auswahl gilt Mittel');
+    assert.equal(
+      await page.locator('[data-stack="offen"] .card .prio').textContent(),
+      'Mittel'
+    );
   });
 
   await step('Link wird als anklickbarer Link dargestellt', async () => {
@@ -142,8 +150,73 @@ try {
     assert.equal(await a.getAttribute('rel'), 'noopener noreferrer');
   });
 
+  await step('Wichtigkeit laesst sich beim Anlegen waehlen', async () => {
+    assert.equal(
+      await page.locator('input[name="new-prio"]:checked').getAttribute('value'),
+      'mittel',
+      'die Auswahl steht nach dem Anlegen wieder auf Mittel'
+    );
+
+    await page.fill('#new-title', 'Werkzeug bestellen');
+    await page.locator('label[for="new-prio-hoch"]').click();
+    await page.click('#new-form button[type=submit]');
+    await waitFor(() => titled('Werkzeug bestellen')?.priority === 'hoch', 'Hoch speichern');
+
+    await page.fill('#new-title', 'Ablage aufräumen');
+    await page.locator('label[for="new-prio-niedrig"]').click();
+    await page.click('#new-form button[type=submit]');
+    await waitFor(() => titled('Ablage aufräumen')?.priority === 'niedrig', 'Niedrig speichern');
+
+    assert.equal(
+      await karte(page, 'offen', 'Werkzeug bestellen').locator('.prio').textContent(),
+      'Hoch'
+    );
+    assert.equal(
+      await karte(page, 'offen', 'Ablage aufräumen').locator('.prio').textContent(),
+      'Niedrig'
+    );
+  });
+
+  await step('Nach Wichtigkeit sortiert Hoch vor Mittel vor Niedrig', async () => {
+    assert.equal(
+      await page.locator('input[name="sort"]:checked').getAttribute('value'),
+      'wichtigkeit'
+    );
+    assert.deepEqual(await titles(page, 'offen'),
+      ['Werkzeug bestellen', 'Angebot für Meier schreiben', 'Ablage aufräumen']);
+  });
+
+  await step('Nach Datum sortiert wieder in Anlagereihenfolge', async () => {
+    await page.locator('label[for="sort-datum"]').click();
+    await page.waitForFunction(
+      () => document.querySelector('[data-stack="offen"] .card h3').textContent.startsWith('Angebot')
+    );
+    assert.deepEqual(await titles(page, 'offen'),
+      ['Angebot für Meier schreiben', 'Werkzeug bestellen', 'Ablage aufräumen']);
+    await page.locator('label[for="sort-wichtigkeit"]').click();
+  });
+
+  await step('Wichtigkeit laesst sich beim Bearbeiten aendern', async () => {
+    await karte(page, 'offen', 'Ablage aufräumen').locator('button', { hasText: 'Bearbeiten' }).click();
+    assert.equal(await page.locator('input[name="edit-prio"]:checked').getAttribute('value'), 'niedrig');
+    await page.locator('label[for="edit-prio-hoch"]').click();
+    await page.locator('#edit-save').click();
+    await waitFor(() => titled('Ablage aufräumen')?.priority === 'hoch', 'Wichtigkeit aendern');
+    assert.deepEqual((await titles(page, 'offen')).slice(0, 2),
+      ['Werkzeug bestellen', 'Ablage aufräumen'], 'beide Hoch stehen vorn');
+  });
+
+  await step('Wichtigkeit ueberlebt das Neuladen', async () => {
+    await page.reload();
+    await page.waitForSelector('#app:not(.hidden)', { timeout: 15000 });
+    assert.equal(
+      await karte(page, 'offen', 'Werkzeug bestellen').locator('.prio').textContent(),
+      'Hoch'
+    );
+  });
+
   await step('Verschieben nach Dran', async () => {
-    await page.locator('[data-stack="offen"] .card button', { hasText: 'Dran' }).click();
+    await karte(page, 'offen', 'Angebot für Meier').locator('button', { hasText: 'Dran' }).click();
     await waitFor(() => titled('Angebot für Meier schreiben')?.status === 'dran', 'Statuswechsel nach dran');
     assert.equal(titled('Angebot für Meier schreiben').status, 'dran');
     await page.locator('#tabs button[data-tab="dran"]').click();
@@ -171,6 +244,7 @@ try {
   await step('Aenderung des Kollegen erscheint beim naechsten Abgleich', async () => {
     const data = board();
     data.tasks.push({
+      // bewusst ohne priority: so sehen Aufgaben aus der Zeit vor dieser Erweiterung aus
       id: 'fremd-1', title: 'Rechnung 4711 prüfen', url: '', note: '', status: 'offen',
       author: 'Kollege', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       doneAt: null, deleted: false,
@@ -179,7 +253,8 @@ try {
     fake.sha = 'sha-fremd';
     await page.locator('#tabs button[data-tab="offen"]').click();
     await page.waitForSelector('[data-stack="offen"] .card', { timeout: 20000 });
-    assert.match(await page.locator('[data-stack="offen"] .card h3').textContent(), /Rechnung 4711/);
+    await karte(page, 'offen', 'Rechnung 4711').waitFor({ timeout: 20000 });
+    assert.equal(await karte(page, 'offen', 'Rechnung 4711').count(), 1);
   });
 
   await step('nach Neuladen bleibt man angemeldet und sieht denselben Stand', async () => {

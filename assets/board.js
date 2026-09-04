@@ -9,6 +9,27 @@ export const STATE_LABELS = {
   erledigt: 'Erledigt',
 };
 
+export const PRIORITIES = ['hoch', 'mittel', 'niedrig'];
+
+export const PRIORITY_LABELS = {
+  hoch: 'Hoch',
+  mittel: 'Mittel',
+  niedrig: 'Niedrig',
+};
+
+export const DEFAULT_PRIORITY = 'mittel';
+
+/** Hoch vor Mittel vor Niedrig. */
+const PRIORITY_RANK = { hoch: 0, mittel: 1, niedrig: 2 };
+
+/** 'wichtigkeit' sortiert nach Priorität, 'datum' nach Anlage- bzw. Erledigungszeit. */
+export const SORT_MODES = ['wichtigkeit', 'datum'];
+export const DEFAULT_SORT = 'wichtigkeit';
+
+export function normalizePriority(value) {
+  return PRIORITIES.includes(value) ? value : DEFAULT_PRIORITY;
+}
+
 export const BOARD_VERSION = 1;
 const TOMBSTONE_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 Tage
 
@@ -21,7 +42,14 @@ export function newId() {
   return 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export function createTask({ title, url = '', note = '', author = '', status = 'offen' }) {
+export function createTask({
+  title,
+  url = '',
+  note = '',
+  author = '',
+  status = 'offen',
+  priority = DEFAULT_PRIORITY,
+}) {
   const now = new Date().toISOString();
   return {
     id: newId(),
@@ -29,6 +57,7 @@ export function createTask({ title, url = '', note = '', author = '', status = '
     url: normalizeUrl(url),
     note: String(note || ''),
     status: STATES.includes(status) ? status : 'offen',
+    priority: normalizePriority(priority),
     author: String(author || ''),
     createdAt: now,
     updatedAt: now,
@@ -81,20 +110,35 @@ export function mergeBoards(remote, local) {
     (t) => !(t.deleted && Date.parse(t.updatedAt || 0) < cutoff)
   );
 
-  return { version: BOARD_VERSION, tasks: sortTasks(tasks) };
+  // Gespeichert wird immer in derselben Reihenfolge, unabhängig davon, wie die
+  // Ansicht gerade sortiert – sonst schriebe jeder Nutzer die Datei neu, nur
+  // weil er anders sortiert.
+  return { version: BOARD_VERSION, tasks: sortTasks(tasks, 'datum') };
 }
 
-export function sortTasks(tasks) {
+function byTime(a, b) {
+  if (a.status === 'erledigt' && b.status === 'erledigt') {
+    return String(b.doneAt || b.updatedAt).localeCompare(String(a.doneAt || a.updatedAt));
+  }
+  return String(a.createdAt).localeCompare(String(b.createdAt));
+}
+
+export function sortTasks(tasks, mode = DEFAULT_SORT) {
   return [...tasks].sort((a, b) => {
-    if (a.status === 'erledigt' && b.status === 'erledigt') {
-      return String(b.doneAt || b.updatedAt).localeCompare(String(a.doneAt || a.updatedAt));
+    if (mode === 'wichtigkeit') {
+      const rank = PRIORITY_RANK[normalizePriority(a.priority)] - PRIORITY_RANK[normalizePriority(b.priority)];
+      if (rank !== 0) return rank;
     }
-    return String(a.createdAt).localeCompare(String(b.createdAt));
+    return byTime(a, b);
   });
 }
 
-export function visibleTasks(board, status) {
-  return sortTasks((board?.tasks || []).filter((t) => !t.deleted && t.status === status));
+/** Aufgaben einer Spalte – Statusfilter und Sortierung greifen zusammen. */
+export function visibleTasks(board, status, mode = DEFAULT_SORT) {
+  return sortTasks(
+    (board?.tasks || []).filter((t) => !t.deleted && t.status === status),
+    mode
+  );
 }
 
 /** Repariert fremde/alte Daten, damit die Oberfläche nie auf undefined läuft. */
@@ -111,6 +155,7 @@ export function sanitizeBoard(input) {
       url: typeof t.url === 'string' ? t.url : '',
       note: typeof t.note === 'string' ? t.note : '',
       status: STATES.includes(t.status) ? t.status : 'offen',
+      priority: normalizePriority(t.priority),
       author: typeof t.author === 'string' ? t.author : '',
       createdAt: t.createdAt || new Date(0).toISOString(),
       updatedAt: t.updatedAt || t.createdAt || new Date(0).toISOString(),
