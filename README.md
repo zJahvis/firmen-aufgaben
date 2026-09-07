@@ -8,7 +8,9 @@ und ohne einen einzigen kostenpflichtigen Dienst.
 * **JAHVIS** arbeitet sie ab, schreibt Notizen dazu und hakt sie ab.
 * Beide sehen dieselbe Pinnwand, auf jedem Gerät, in Echtzeit (Abgleich alle 10 Sekunden).
 
-Jede Aufgabe hat zusätzlich eine **Wichtigkeit**: *Hoch*, *Mittel* oder *Niedrig*.
+Jede Aufgabe hat eine **Wichtigkeit** (*Hoch* / *Mittel* / *Niedrig*), optional eine
+**Frist**, eine **Zuständigkeit**, zwei getrennte **Links** und einen
+**Kommentarverlauf**.
 
 ---
 
@@ -27,27 +29,96 @@ Die Daten liegen also serverseitig und versioniert (jede Änderung ist ein Commi
 nicht nur im Browser-Speicher. Der `localStorage` dient ausschließlich als
 Zwischenspeicher, damit die Pinnwand sofort sichtbar ist.
 
-### Wichtigkeit
+### Was eine Aufgabe hat
 
-Jede Aufgabe trägt das Feld `priority` mit den Werten `hoch`, `mittel` oder
-`niedrig`; ohne Auswahl gilt **Mittel**. Gewählt wird sie beim Anlegen und
-jederzeit über *Bearbeiten*. Auf der Karte steht sie als kleine Marke – *Hoch*
-in Gold, *Mittel* und *Niedrig* zurückhaltend.
+| Feld | Bedeutung | Vorgabe bei alten Aufgaben |
+|---|---|---|
+| `priority` | `hoch` / `mittel` / `niedrig` | `mittel` |
+| `due` | Frist als `JJJJ-MM-TT`, leer = keine | leer |
+| `assignee` | `JAHVIS`, `Kollege` oder leer (= offen) | leer |
+| `author` | wer sie angelegt hat | unverändert |
+| `comments` | Verlauf aus `{id, author, text, at}` | die alte `note` wird zum ersten Kommentar |
+| `url` / `url2` | zwei getrennte Links, je mit eigener Beschriftung | leer |
+| `order` | Reihenfolge von Hand innerhalb einer Wichtigkeit | Anlagezeitpunkt |
+| `archived` | im Archiv statt gelöscht | `false` |
 
-Die Sortierung lässt sich über der Pinnwand umschalten:
+Zusätzlich führt `board.json` eine Liste `activity` mit den letzten 60 Ereignissen
+(„Kollege hat angelegt: …"). Alte Dateien brauchen keine Migration: Fehlende
+Felder werden beim Laden mit den Vorgaben oben ergänzt, und zwar auf jedem Gerät
+gleich, damit daraus keine überflüssigen Schreibvorgänge entstehen.
 
-* **Nach Wichtigkeit** (Voreinstellung) – Hoch vor Mittel vor Niedrig, bei
-  gleicher Wichtigkeit entscheidet die Zeit.
-* **Nach Datum** – wie zuvor nach Anlage- bzw. Erledigungszeit.
+### Fristen
 
-Die Sortierung gilt innerhalb jeder Spalte; **Offen**, **Dran** und **Erledigt**
-bleiben als Status erhalten und greifen mit der Sortierung zusammen. Die Wahl
-merkt sich der jeweilige Browser, sie verändert die gespeicherten Daten nicht:
-`board.json` wird immer in derselben Reihenfolge geschrieben, damit nicht jeder
-Nutzer die Datei neu schreibt, nur weil er anders sortiert.
+Eine Aufgabe mit Frist zeigt ihren Stand als Marke: *heute fällig*, *morgen
+fällig*, *3 Tage überfällig*. Überfälliges ist in Gold hervorgehoben. Erledigtes
+gilt nie als überfällig. Ganz oben auf der Seite steht die **Morgen-Übersicht**
+mit allem, was heute fällig oder überfällig ist – überfällig zuerst. Ein Klick
+darauf springt zur Karte.
 
-Aufgaben aus der Zeit vor dieser Erweiterung haben kein `priority`-Feld; sie
-werden beim Laden als *Mittel* behandelt. Es ist keine Migration nötig.
+### Kommentare statt einer Notiz
+
+Der Verlauf wird nur ergänzt, nie überschrieben. Auf der Karte steht der jüngste
+Beitrag, der ganze Verlauf öffnet sich über *Kommentare (N)*. Beim
+Zusammenführen zweier Stände werden Kommentare **vereinigt** statt ersetzt –
+schreiben beide gleichzeitig, bleiben beide Beiträge erhalten.
+
+### Sortieren, Filtern, Suchen
+
+* **Nach Wichtigkeit** (Voreinstellung) – Hoch vor Mittel vor Niedrig, darin die
+  Reihenfolge von Hand, sonst die Zeit.
+* **Nach Datum** – nach Anlage- bzw. Erledigungszeit.
+* **Wichtigkeitsfilter** *Alle / Hoch / Mittel / Niedrig*, der mit den Spalten
+  Offen, Dran und Erledigt zusammen greift (z. B. nur Hoch + Offen).
+* **Suche** über Titel, Links, Beschriftungen, Namen und alle Kommentare;
+  mehrere Wörter müssen alle passen.
+* **Erledigt ausblenden** nimmt die dritte Spalte samt Reiter aus der Ansicht.
+
+Diese Einstellungen merkt sich der jeweilige Browser. Sie verändern die
+gespeicherten Daten nicht: `board.json` wird immer in derselben Reihenfolge
+geschrieben, damit nicht jeder Nutzer die Datei neu schreibt, nur weil er anders
+sortiert.
+
+### Reihenfolge von Hand
+
+Innerhalb derselben Wichtigkeit lässt sich die Reihenfolge ändern – am Rechner
+durch **Ziehen am Griff** oben rechts auf der Karte, überall sonst über die
+Pfeile **↑ ↓** in der Fußzeile der Karte. Beides schreibt nur die gezogene
+Aufgabe um (ein Ordnungswert zwischen den Nachbarn), nicht die ganze Spalte.
+Möglich ist das nur bei Sortierung *Nach Wichtigkeit* und außerhalb von
+*Erledigt* – sonst würde die Sortierung die Handarbeit sofort überschreiben.
+
+### Archiv statt löschen
+
+*Archivieren* nimmt eine Aufgabe aus den Spalten, ohne sie zu verlieren. Über
+*Archiv* in der Werkzeugleiste ist sie samt Kommentaren einsehbar und mit einem
+Klick wiederherstellbar. Nur im Archiv gibt es zusätzlich *Endgültig löschen*.
+
+### Aktivität und Hinweise
+
+Unter der Pinnwand steht eine aufklappbare Aktivitätszeile. Was seit dem letzten
+Besuch von der anderen Person kam, zählt der goldene **N neu**-Knopf in der
+Kopfzeile; betroffene Karten tragen eine *Neu*-Marke. Ein Klick hakt alles ab.
+
+Über die Glocke lassen sich zusätzlich **Browser-Hinweise** einschalten.
+
+> **Grenze, offen gesagt:** Diese Hinweise erscheinen nur, solange die Seite in
+> einem Tab geöffnet ist. Echtes Web-Push (Hinweis bei geschlossenem Browser)
+> braucht einen eigenen Push-Server mit VAPID-Schlüsseln; GitHub Pages liefert
+> nur statische Dateien aus und kann das nicht. Ein bezahlter Maildienst kam
+> laut Vorgabe nicht in Frage, deshalb der Zähler in der Kopfzeile als
+> verlässlicher Teil und die Browser-Hinweise als Zugabe.
+
+### Links
+
+Eine Aufgabe hat zwei getrennte Linkfelder – etwa Auftrag und Ablageordner.
+Ohne eigene Beschriftung bildet die Seite eine lesbare Kurzform aus der Adresse
+(`example.com · mein auftrag`); im Bearbeiten-Dialog lässt sich je Link eine
+eigene Beschriftung setzen.
+
+> **Grenze:** Die echte Seitenüberschrift eines fremden Links lässt sich von
+> einer statischen Seite aus nicht laden – fremde Server erlauben das per CORS
+> nicht, und ein Vorschau-Dienst wäre ein zusätzlicher (meist bezahlter)
+> Baustein. Deshalb Kurzform aus der Adresse plus eigene Beschriftung.
 
 ### Gleichzeitiges Arbeiten
 
@@ -56,6 +127,9 @@ Zusammengeführt wird **pro Aufgabe** anhand des Zeitstempels `updatedAt`,
 nicht pro Datei. Ändern beide Personen gleichzeitig verschiedene Aufgaben,
 geht nichts verloren; bei einem Schreibkonflikt (HTTP 409) wird bis zu
 fünfmal automatisch neu zusammengeführt.
+
+Zwei Dinge sind davon ausgenommen, weil sie Verläufe sind und kein Zustand:
+**Kommentare** und die **Aktivität** werden vereinigt statt ersetzt.
 
 ---
 

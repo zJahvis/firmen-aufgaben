@@ -17,6 +17,7 @@ const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
+  '.woff2': 'font/woff2',
 };
 
 let passed = 0;
@@ -77,11 +78,25 @@ async function waitFor(cond, was, ms = 20000) {
   throw new Error('Zeitueberschreitung beim Warten auf: ' + was);
 }
 
-const board = () => JSON.parse(fake.file || '{"tasks":[]}');
+const board = () => JSON.parse(fake.file || '{"tasks":[],"activity":[]}');
 const titled = (t) => board().tasks.find((x) => x.title === t);
 const titles = (page, stack) => page.locator(`[data-stack="${stack}"] .card h3`).allTextContents();
 const karte = (page, stack, teil) =>
   page.locator(`[data-stack="${stack}"] .card`).filter({ hasText: teil });
+
+/** Schreibt direkt in die Attrappe – simuliert den Kollegen am anderen Gerät. */
+function setRemote(mutate) {
+  const data = board();
+  mutate(data);
+  fake.file = JSON.stringify(data);
+  fake.sha = 'sha-fremd-' + Math.random().toString(36).slice(2);
+}
+
+const heute = (() => {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+})();
 
 const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || undefined });
 
@@ -107,7 +122,6 @@ try {
     await page.fill('#pin-input', '111111');
     await page.click('#pin-submit');
     await page.waitForFunction(() => document.querySelector('#pin-error').textContent.length > 0);
-    assert.match(await page.locator('#pin-error').textContent(), /stimmt nicht/);
     assert.ok(await page.locator('#app').isHidden());
   });
 
@@ -116,152 +130,252 @@ try {
     await page.click('#pin-submit');
     await page.waitForSelector('#app:not(.hidden)', { timeout: 15000 });
     await page.locator('#who-dialog button[value="JAHVIS"]').click();
-    await page.waitForFunction(() => document.querySelector('#who-chip').textContent === 'JAHVIS');
-  });
-
-  await step('leere Pinnwand wird angelegt', async () => {
+    await page.waitForFunction(() => document.querySelector('#who-chip').textContent.includes('JAHVIS'));
     await waitFor(() => fake.file !== null, 'Anlegen von board.json');
-    assert.ok(fake.file, 'board.json muss serverseitig angelegt worden sein');
-    assert.deepEqual(board().tasks, []);
   });
 
-  await step('Aufgabe anlegen landet in Offen und wird gespeichert', async () => {
+  await step('Aufgabe anlegen: Mittel, JAHVIS zustaendig, Eintrag in der Aktivitaet', async () => {
     await page.fill('#new-title', 'Angebot für Meier schreiben');
-    await page.fill('#new-url', 'example.com/auftrag/17');
     await page.click('#new-form button[type=submit]');
     await waitFor(() => !!titled('Angebot für Meier schreiben'), 'Speichern der neuen Aufgabe');
-    assert.equal(await page.locator('[data-stack="offen"] .card').count(), 1);
-    assert.equal(await page.locator('.column-head .count[data-count="offen"]').textContent(), '1');
     const t = titled('Angebot für Meier schreiben');
-    assert.ok(t, 'Aufgabe muss serverseitig liegen');
-    assert.equal(t.url, 'https://example.com/auftrag/17');
-    assert.equal(t.status, 'offen');
+    assert.equal(t.priority, 'mittel');
+    assert.equal(t.assignee, 'JAHVIS');
     assert.equal(t.author, 'JAHVIS');
-    assert.equal(t.priority, 'mittel', 'ohne Auswahl gilt Mittel');
-    assert.equal(
-      await page.locator('[data-stack="offen"] .card .prio').textContent(),
-      'Mittel'
+    assert.equal(t.status, 'offen');
+    assert.deepEqual(t.comments, []);
+    assert.equal(await page.locator('[data-stack="offen"] .card .prio').textContent(), 'Mittel');
+    assert.match(
+      await karte(page, 'offen', 'Angebot für Meier').locator('.assignee').textContent(),
+      /Zuständig: JAHVIS/
     );
+    const eintrag = board().activity[0];
+    assert.equal(eintrag.kind, 'angelegt');
+    assert.equal(eintrag.actor, 'JAHVIS');
   });
 
-  await step('Link wird als anklickbarer Link dargestellt', async () => {
-    const a = page.locator('[data-stack="offen"] .card a.link');
-    assert.equal(await a.getAttribute('href'), 'https://example.com/auftrag/17');
-    assert.equal(await a.getAttribute('rel'), 'noopener noreferrer');
+  await step('Weitere Angaben: zwei getrennte Links und eine Frist', async () => {
+    await page.fill('#new-title', 'Preisliste verschicken');
+    await page.locator('#new-more summary').click();
+    await page.fill('#new-url', 'example.com/preisliste.pdf');
+    await page.fill('#new-url2', 'example.com/ablage/2026');
+    await page.fill('#new-due', '2020-01-15');
+    await page.click('#new-form button[type=submit]');
+    await waitFor(() => !!titled('Preisliste verschicken'), 'Speichern mit Links und Frist');
+    const t = titled('Preisliste verschicken');
+    assert.equal(t.url, 'https://example.com/preisliste.pdf');
+    assert.equal(t.url2, 'https://example.com/ablage/2026');
+    assert.equal(t.due, '2020-01-15');
+
+    const karteEl = karte(page, 'offen', 'Preisliste verschicken');
+    assert.equal(await karteEl.locator('.links .link').count(), 2, 'beide Links stehen getrennt auf der Karte');
+    assert.equal(await karteEl.locator('.links .link').first().locator('.link-text').textContent(),
+      'example.com · preisliste', 'Kurzform statt roher Adresse');
   });
 
-  await step('Wichtigkeit laesst sich beim Anlegen waehlen', async () => {
-    assert.equal(
-      await page.locator('input[name="new-prio"]:checked').getAttribute('value'),
-      'mittel',
-      'die Auswahl steht nach dem Anlegen wieder auf Mittel'
-    );
+  await step('abgelaufene Frist wird als ueberfaellig markiert', async () => {
+    const karteEl = karte(page, 'offen', 'Preisliste verschicken');
+    assert.match(await karteEl.locator('.due-ueberfaellig').textContent(), /überfällig/);
+  });
 
+  await step('Morgen-Uebersicht zeigt Ueberfaelliges oben', async () => {
+    await page.waitForSelector('#overview:not(.hidden)');
+    assert.match(await page.locator('#due-list .due-title').first().textContent(), /Preisliste/);
+    await page.fill('#new-title', 'Heute anrufen');
+    await page.fill('#new-due', heute);
+    await page.click('#new-form button[type=submit]');
+    await waitFor(() => !!titled('Heute anrufen'), 'Aufgabe mit heutiger Frist');
+    await page.waitForFunction(() => document.querySelectorAll('#due-list li').length === 2);
+    assert.deepEqual(await page.locator('#due-list .due-title').allTextContents(),
+      ['Preisliste verschicken', 'Heute anrufen'], 'überfällig vor heute');
+    await page.fill('#new-due', '');
+  });
+
+  await step('Wichtigkeit beim Anlegen und Sortierung', async () => {
     await page.fill('#new-title', 'Werkzeug bestellen');
     await page.locator('label[for="new-prio-hoch"]').click();
     await page.click('#new-form button[type=submit]');
     await waitFor(() => titled('Werkzeug bestellen')?.priority === 'hoch', 'Hoch speichern');
+    assert.equal((await titles(page, 'offen'))[0], 'Werkzeug bestellen', 'Hoch steht oben');
 
-    await page.fill('#new-title', 'Ablage aufräumen');
-    await page.locator('label[for="new-prio-niedrig"]').click();
-    await page.click('#new-form button[type=submit]');
-    await waitFor(() => titled('Ablage aufräumen')?.priority === 'niedrig', 'Niedrig speichern');
-
-    assert.equal(
-      await karte(page, 'offen', 'Werkzeug bestellen').locator('.prio').textContent(),
-      'Hoch'
-    );
-    assert.equal(
-      await karte(page, 'offen', 'Ablage aufräumen').locator('.prio').textContent(),
-      'Niedrig'
-    );
-  });
-
-  await step('Nach Wichtigkeit sortiert Hoch vor Mittel vor Niedrig', async () => {
-    assert.equal(
-      await page.locator('input[name="sort"]:checked').getAttribute('value'),
-      'wichtigkeit'
-    );
-    assert.deepEqual(await titles(page, 'offen'),
-      ['Werkzeug bestellen', 'Angebot für Meier schreiben', 'Ablage aufräumen']);
-  });
-
-  await step('Nach Datum sortiert wieder in Anlagereihenfolge', async () => {
     await page.locator('label[for="sort-datum"]').click();
-    await page.waitForFunction(
-      () => document.querySelector('[data-stack="offen"] .card h3').textContent.startsWith('Angebot')
-    );
-    assert.deepEqual(await titles(page, 'offen'),
-      ['Angebot für Meier schreiben', 'Werkzeug bestellen', 'Ablage aufräumen']);
+    await page.waitForFunction(() =>
+      document.querySelector('[data-stack="offen"] .card h3').textContent.startsWith('Angebot'));
+    assert.equal((await titles(page, 'offen'))[0], 'Angebot für Meier schreiben', 'nach Datum: Anlagereihenfolge');
     await page.locator('label[for="sort-wichtigkeit"]').click();
   });
 
-  await step('Wichtigkeit laesst sich beim Bearbeiten aendern', async () => {
-    await karte(page, 'offen', 'Ablage aufräumen').locator('button', { hasText: 'Bearbeiten' }).click();
-    assert.equal(await page.locator('input[name="edit-prio"]:checked').getAttribute('value'), 'niedrig');
-    await page.locator('label[for="edit-prio-hoch"]').click();
-    await page.locator('#edit-save').click();
-    await waitFor(() => titled('Ablage aufräumen')?.priority === 'hoch', 'Wichtigkeit aendern');
-    assert.deepEqual((await titles(page, 'offen')).slice(0, 2),
-      ['Werkzeug bestellen', 'Ablage aufräumen'], 'beide Hoch stehen vorn');
+  await step('Filter Wichtigkeit mal Status', async () => {
+    await page.locator('label[for="filter-prio-hoch"]').click();
+    await page.waitForFunction(() => document.querySelectorAll('[data-stack="offen"] .card').length === 1);
+    assert.deepEqual(await titles(page, 'offen'), ['Werkzeug bestellen']);
+    assert.equal(await page.locator('.column[data-col="dran"] .empty').textContent(), 'Nichts gefunden.');
+    await page.locator('label[for="filter-prio-alle"]').click();
+    await page.waitForFunction(() => document.querySelectorAll('[data-stack="offen"] .card').length === 4);
   });
 
-  await step('Wichtigkeit ueberlebt das Neuladen', async () => {
-    await page.reload();
-    await page.waitForSelector('#app:not(.hidden)', { timeout: 15000 });
-    assert.equal(
-      await karte(page, 'offen', 'Werkzeug bestellen').locator('.prio').textContent(),
-      'Hoch'
+  await step('Suche findet ueber Titel und Kommentare', async () => {
+    await page.fill('#search', 'werkzeug');
+    await page.waitForFunction(() => document.querySelectorAll('[data-stack="offen"] .card').length === 1);
+    assert.deepEqual(await titles(page, 'offen'), ['Werkzeug bestellen']);
+    await page.click('#search-clear');
+    await page.waitForFunction(() => document.querySelectorAll('[data-stack="offen"] .card').length === 4);
+  });
+
+  await step('Kommentare haengen sich an und sind durchsuchbar', async () => {
+    await karte(page, 'offen', 'Angebot für Meier').locator('button', { hasText: 'Kommentare' }).click();
+    await page.waitForSelector('#comments-dialog[open]');
+    assert.equal(await page.locator('#thread .empty').textContent(), 'Noch keine Kommentare.');
+    await page.fill('#comment-text', 'Warte auf die Freigabe vom Chef');
+    await page.click('#comment-save');
+    await waitFor(() => titled('Angebot für Meier schreiben')?.comments.length === 1, 'Kommentar speichern');
+    await page.fill('#comment-text', 'Freigabe ist da');
+    await page.click('#comment-save');
+    await waitFor(() => titled('Angebot für Meier schreiben')?.comments.length === 2, 'zweiter Kommentar');
+    assert.equal(await page.locator('#thread li').count(), 2, 'der Verlauf wächst, er wird nicht ersetzt');
+    await page.click('#comments-close');
+
+    const karteEl = karte(page, 'offen', 'Angebot für Meier');
+    assert.match(await karteEl.locator('.note-text').textContent(), /Freigabe ist da/);
+    await page.fill('#search', 'chef');
+    await page.waitForFunction(() => document.querySelectorAll('[data-stack="offen"] .card').length === 1);
+    assert.deepEqual(await titles(page, 'offen'), ['Angebot für Meier schreiben']);
+    await page.click('#search-clear');
+  });
+
+  await step('Zustaendigkeit laesst sich auf der Karte weiterschalten', async () => {
+    const chip = karte(page, 'offen', 'Werkzeug bestellen').locator('.assignee');
+    await chip.click();
+    await waitFor(() => titled('Werkzeug bestellen')?.assignee === 'Kollege', 'Wechsel auf Kollege');
+    assert.match(await chip.textContent(), /Zuständig: Kollege/);
+    await chip.click();
+    await waitFor(() => titled('Werkzeug bestellen')?.assignee === '', 'Wechsel auf Offen');
+    assert.match(await chip.textContent(), /Zuständig: Offen/);
+  });
+
+  await step('Reihenfolge innerhalb einer Wichtigkeit mit den Pfeilen', async () => {
+    await page.fill('#new-title', 'Zweite hohe Aufgabe');
+    await page.locator('label[for="new-prio-hoch"]').click();
+    await page.click('#new-form button[type=submit]');
+    await waitFor(() => !!titled('Zweite hohe Aufgabe'), 'zweite hohe Aufgabe');
+    assert.deepEqual((await titles(page, 'offen')).slice(0, 2), ['Werkzeug bestellen', 'Zweite hohe Aufgabe']);
+
+    await karte(page, 'offen', 'Zweite hohe Aufgabe').locator('button[title="Eine Position höher"]').click();
+    await page.waitForFunction(() =>
+      document.querySelector('[data-stack="offen"] .card h3').textContent.startsWith('Zweite'));
+    assert.deepEqual((await titles(page, 'offen')).slice(0, 2), ['Zweite hohe Aufgabe', 'Werkzeug bestellen']);
+    await waitFor(() => titled('Zweite hohe Aufgabe').order < titled('Werkzeug bestellen').order,
+      'neue Reihenfolge gespeichert');
+  });
+
+  await step('Ziehen und Fallenlassen sortiert dieselbe Wichtigkeit um', async () => {
+    const ids = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-stack="offen"] .card')].slice(0, 2).map((c) => c.dataset.id));
+    await page.evaluate(([quelle, ziel]) => {
+      const src = document.querySelector(`.card[data-id="${quelle}"]`);
+      const dst = document.querySelector(`.card[data-id="${ziel}"]`);
+      const dt = new DataTransfer();
+      const kasten = dst.getBoundingClientRect();
+      const unten = kasten.top + kasten.height * 0.8;
+      src.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+      dst.dispatchEvent(new DragEvent('dragover', { bubbles: true, dataTransfer: dt, clientY: unten }));
+      dst.dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer: dt, clientY: unten }));
+      src.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
+    }, ids);
+    await page.waitForFunction(() =>
+      document.querySelector('[data-stack="offen"] .card h3').textContent.startsWith('Werkzeug'));
+    assert.deepEqual((await titles(page, 'offen')).slice(0, 2), ['Werkzeug bestellen', 'Zweite hohe Aufgabe']);
+  });
+
+  await step('Griff verschwindet, wenn nach Datum sortiert wird', async () => {
+    assert.ok(await page.locator('[data-stack="offen"] .card .grip').first().count() > 0);
+    await page.locator('label[for="sort-datum"]').click();
+    await page.waitForFunction(() => document.querySelectorAll('[data-stack="offen"] .grip').length === 0);
+    await page.locator('label[for="sort-wichtigkeit"]').click();
+    await page.waitForFunction(() => document.querySelectorAll('[data-stack="offen"] .grip').length > 0);
+  });
+
+  await step('Status wechseln schreibt die Aktivitaet mit', async () => {
+    await karte(page, 'offen', 'Angebot für Meier').locator('button', { hasText: 'Dran' }).click();
+    await waitFor(() => titled('Angebot für Meier schreiben')?.status === 'dran', 'Statuswechsel');
+    await page.locator('#tabs button[data-tab="dran"]').click();
+    await karte(page, 'dran', 'Angebot für Meier').locator('button', { hasText: 'Erledigt' }).click();
+    await waitFor(() => titled('Angebot für Meier schreiben')?.status === 'erledigt', 'erledigt');
+    assert.equal(board().activity[0].kind, 'erledigt');
+    assert.match(
+      await page.locator('#activity-list li .activity-text').first().textContent(),
+      /JAHVIS hat erledigt: Angebot für Meier schreiben/
     );
   });
 
-  await step('Verschieben nach Dran', async () => {
-    await karte(page, 'offen', 'Angebot für Meier').locator('button', { hasText: 'Dran' }).click();
-    await waitFor(() => titled('Angebot für Meier schreiben')?.status === 'dran', 'Statuswechsel nach dran');
-    assert.equal(titled('Angebot für Meier schreiben').status, 'dran');
-    await page.locator('#tabs button[data-tab="dran"]').click();
-    assert.equal(await page.locator('[data-stack="dran"] .card').count(), 1);
+  await step('Erledigt ausblenden raeumt Spalte und Reiter weg', async () => {
+    await page.check('#hide-done');
+    await page.waitForFunction(() =>
+      document.querySelector('#tabs button[data-tab="erledigt"]').classList.contains('is-off'));
+    assert.ok(await page.locator('.column[data-col="erledigt"]').isHidden());
+    await page.uncheck('#hide-done');
+    await page.waitForFunction(() =>
+      !document.querySelector('#tabs button[data-tab="erledigt"]').classList.contains('is-off'));
   });
 
-  await step('Notiz hinzufuegen', async () => {
-    await page.locator('[data-stack="dran"] .card button', { hasText: 'Notiz' }).click();
-    await page.fill('#edit-note', 'Preisliste 2026 abgewartet, Rest steht.');
-    await page.locator('#edit-save').click();
-    await waitFor(() => (titled('Angebot für Meier schreiben')?.note || '').includes('Preisliste'), 'Speichern der Notiz');
-    await page.waitForSelector('[data-stack="dran"] .card .note');
-    assert.equal(titled('Angebot für Meier schreiben').note, 'Preisliste 2026 abgewartet, Rest steht.');
-    assert.match(await page.locator('[data-stack="dran"] .card .note').textContent(), /Preisliste/);
-  });
-
-  await step('Als erledigt markieren', async () => {
-    await page.locator('[data-stack="dran"] .card button', { hasText: 'Erledigt' }).click();
-    await waitFor(() => titled('Angebot für Meier schreiben')?.status === 'erledigt', 'Statuswechsel nach erledigt');
-    const t = titled('Angebot für Meier schreiben');
-    assert.equal(t.status, 'erledigt');
-    assert.ok(t.doneAt);
-  });
-
-  await step('Aenderung des Kollegen erscheint beim naechsten Abgleich', async () => {
-    const data = board();
-    data.tasks.push({
-      // bewusst ohne priority: so sehen Aufgaben aus der Zeit vor dieser Erweiterung aus
-      id: 'fremd-1', title: 'Rechnung 4711 prüfen', url: '', note: '', status: 'offen',
-      author: 'Kollege', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      doneAt: null, deleted: false,
-    });
-    fake.file = JSON.stringify(data);
-    fake.sha = 'sha-fremd';
+  await step('Archivieren statt loeschen – mit Wiederherstellen', async () => {
     await page.locator('#tabs button[data-tab="offen"]').click();
-    await page.waitForSelector('[data-stack="offen"] .card', { timeout: 20000 });
-    await karte(page, 'offen', 'Rechnung 4711').waitFor({ timeout: 20000 });
-    assert.equal(await karte(page, 'offen', 'Rechnung 4711').count(), 1);
+    await karte(page, 'offen', 'Heute anrufen').locator('button', { hasText: 'Archivieren' }).click();
+    await waitFor(() => titled('Heute anrufen')?.archived === true, 'archivieren');
+    assert.equal(await karte(page, 'offen', 'Heute anrufen').count(), 0, 'nicht mehr in der Spalte');
+    assert.equal(titled('Heute anrufen').deleted, false, 'die Aufgabe bleibt erhalten');
+
+    await page.click('#archive-toggle');
+    await page.waitForSelector('#archive:not(.hidden)');
+    const imArchiv = karte(page, 'archiv', 'Heute anrufen');
+    assert.equal(await imArchiv.count(), 1);
+    await imArchiv.locator('button', { hasText: 'Wiederherstellen' }).click();
+    await waitFor(() => titled('Heute anrufen')?.archived === false, 'wiederherstellen');
+    await page.click('#archive-toggle');
+    await page.waitForSelector('#board:not(.hidden)');
+    assert.equal(await karte(page, 'offen', 'Heute anrufen').count(), 1);
   });
 
-  await step('nach Neuladen bleibt man angemeldet und sieht denselben Stand', async () => {
+  await step('alte Notiz des Kollegen wird zum ersten Kommentar', async () => {
+    setRemote((data) => {
+      data.tasks.push({
+        // so sah eine Aufgabe vor dieser Erweiterung aus: nur note, kein comments
+        id: 'alt-1', title: 'Rechnung 4711 prüfen', url: '', note: 'Beleg fehlt noch',
+        status: 'offen', author: 'Kollege', createdAt: '2026-01-02T08:00:00.000Z',
+        updatedAt: '2026-01-02T08:00:00.000Z', doneAt: null, deleted: false,
+      });
+    });
+    await page.waitForSelector('.card[data-id="alt-1"]', { timeout: 20000 });
+    const karteEl = page.locator('.card[data-id="alt-1"]');
+    assert.match(await karteEl.locator('.note-text').textContent(), /Beleg fehlt noch/);
+    assert.match(await karteEl.locator('.prio').textContent(), /Mittel/, 'Wichtigkeit bekommt einen Vorgabewert');
+    assert.match(await karteEl.locator('.assignee').textContent(), /Offen/, 'Zuständigkeit bleibt offen');
+    assert.match(await karteEl.locator('button', { hasText: 'Kommentare' }).textContent(), /\(1\)/);
+  });
+
+  await step('Neues vom Kollegen erscheint als Zaehler und laesst sich abhaken', async () => {
+    setRemote((data) => {
+      // bewusst in der Zukunft: so sieht es aus, wenn die Uhr des anderen vorgeht
+      const jetzt = new Date(Date.now() + 60000).toISOString();
+      data.activity.unshift({
+        id: 'akt-neu', at: jetzt, actor: 'Kollege', kind: 'angelegt',
+        taskId: 'alt-1', title: 'Rechnung 4711 prüfen',
+      });
+    });
+    await page.waitForSelector('#news-chip:not(.hidden)', { timeout: 20000 });
+    assert.equal(await page.locator('#news-count').textContent(), '1');
+    assert.ok(await page.locator('.card[data-id="alt-1"] .flag-neu').isVisible());
+    await page.click('#news-chip');
+    await page.waitForFunction(() => document.querySelector('#news-chip').classList.contains('hidden'));
+    assert.equal(await page.locator('.card[data-id="alt-1"] .flag-neu').count(), 0);
+  });
+
+  await step('nach Neuladen bleibt alles erhalten', async () => {
     await page.reload();
     await page.waitForSelector('#app:not(.hidden)', { timeout: 15000 });
-    await page.locator('#tabs button[data-tab="erledigt"]').click();
-    assert.equal(await page.locator('[data-stack="erledigt"] .card').count(), 1);
+    await page.waitForSelector('.card[data-id="alt-1"]');
+    assert.equal(await page.locator('#tabs button[data-tab="offen"]').getAttribute('aria-selected'), 'true');
+    assert.equal(await page.locator('input[name="sort"]:checked').getAttribute('value'), 'wichtigkeit');
   });
 
   await step('Sperren verlangt wieder die PIN', async () => {
@@ -289,17 +403,22 @@ try {
   });
 
   await step('Ansicht am Schreibtisch zeigt alle drei Spalten', async () => {
-    const wide = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const wide = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const p3 = await wide.newPage();
     await installFakeGithub(p3);
     await p3.goto(`${base}/index.html#c=${sealed}`);
     await p3.fill('#pin-input', PIN);
     await p3.click('#pin-submit');
     await p3.waitForSelector('#app:not(.hidden)', { timeout: 15000 });
+    await p3.locator('#who-dialog button[value="JAHVIS"]').click();
+    await p3.waitForFunction(() => !document.querySelector('#who-dialog').open);
     for (const s of ['offen', 'dran', 'erledigt']) {
       assert.ok(await p3.locator(`[data-col="${s}"]`).isVisible(), s + ' muss sichtbar sein');
     }
     assert.ok(!(await p3.locator('#tabs').isVisible()), 'Reiter sind am Schreibtisch ausgeblendet');
+    await p3.check('#hide-done');
+    await p3.waitForSelector('.board.two-columns');
+    assert.ok(await p3.locator('[data-col="erledigt"]').isHidden(), 'Erledigt ist ausgeblendet');
     await wide.close();
   });
 

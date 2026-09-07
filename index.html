@@ -50,6 +50,19 @@
         <span class="brand-sub">Aufgaben</span>
       </div>
       <div class="spacer"></div>
+
+      <button class="news hidden" id="news-chip" title="Neues seit deinem letzten Besuch – klicken zum Abhaken">
+        <span id="news-count">0</span> neu
+      </button>
+
+      <button class="icon-btn" id="bell" title="Browser-Hinweise einschalten" aria-label="Browser-Hinweise" aria-pressed="false">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"></path>
+          <path d="M10.5 20a2 2 0 0 0 3 0"></path>
+        </svg>
+      </button>
+
       <button class="who" id="who-chip" title="Wer bin ich?">…</button>
       <div class="sync" id="sync"><span class="led"></span><span id="sync-text">bereit</span></div>
       <button class="btn btn-sm" id="logout" title="Abmelden" aria-label="Sperren">
@@ -66,42 +79,113 @@
   <main>
     <div id="banner" class="banner hidden" role="alert"></div>
 
+    <!-- Morgen-Übersicht -->
+    <section class="panel hidden" id="overview" aria-labelledby="overview-title">
+      <p class="eyebrow" id="overview-title">Morgen-Übersicht</p>
+      <ul class="due-list" id="due-list"></ul>
+    </section>
+
+    <!-- Neue Aufgabe -->
     <form class="composer" id="new-form">
       <p class="eyebrow">Neue Aufgabe</p>
       <div class="composer-grid">
         <input id="new-title" type="text" placeholder="Was ist zu tun?" aria-label="Titel der Aufgabe" required>
-        <input id="new-url" type="text" placeholder="Link (optional) – z. B. example.com/auftrag" aria-label="Link">
         <div class="choice-row" id="new-prio-row">
           <span class="choice-label">Wichtigkeit</span>
-        <div class="seg" role="radiogroup" aria-label="Wichtigkeit">
-          <input type="radio" name="new-prio" id="new-prio-hoch" value="hoch">
-          <label for="new-prio-hoch">Hoch</label>
-          <input type="radio" name="new-prio" id="new-prio-mittel" value="mittel" checked>
-          <label for="new-prio-mittel">Mittel</label>
-          <input type="radio" name="new-prio" id="new-prio-niedrig" value="niedrig">
-          <label for="new-prio-niedrig">Niedrig</label>
-        </div>
+          <div class="seg" role="radiogroup" aria-label="Wichtigkeit">
+            <input type="radio" name="new-prio" id="new-prio-hoch" value="hoch">
+            <label for="new-prio-hoch">Hoch</label>
+            <input type="radio" name="new-prio" id="new-prio-mittel" value="mittel" checked>
+            <label for="new-prio-mittel">Mittel</label>
+            <input type="radio" name="new-prio" id="new-prio-niedrig" value="niedrig">
+            <label for="new-prio-niedrig">Niedrig</label>
+          </div>
         </div>
         <button class="btn btn-primary" type="submit">Hinzufügen</button>
       </div>
+
+      <details class="more-fields" id="new-more">
+        <summary>Weitere Angaben</summary>
+        <div class="field-grid">
+          <div class="field">
+            <label for="new-url">Link</label>
+            <input id="new-url" type="text" placeholder="z. B. example.com/auftrag">
+          </div>
+          <div class="field">
+            <label for="new-url2">Zweiter Link</label>
+            <input id="new-url2" type="text" placeholder="z. B. Ordner oder Ablage">
+          </div>
+          <div class="field">
+            <label for="new-due">Frist</label>
+            <input id="new-due" type="date">
+          </div>
+          <div class="field">
+            <label id="new-assignee-label">Zuständig</label>
+            <div class="seg seg-wide" role="radiogroup" aria-labelledby="new-assignee-label">
+              <input type="radio" name="new-assignee" id="new-assignee-jahvis" value="JAHVIS" checked>
+              <label for="new-assignee-jahvis">JAHVIS</label>
+              <input type="radio" name="new-assignee" id="new-assignee-kollege" value="Kollege">
+              <label for="new-assignee-kollege">Kollege</label>
+              <input type="radio" name="new-assignee" id="new-assignee-offen" value="">
+              <label for="new-assignee-offen">Offen</label>
+            </div>
+          </div>
+        </div>
+      </details>
+
       <p class="hint">Neue Aufgaben landen automatisch in <strong>Offen</strong>.</p>
     </form>
 
-    <div class="boardbar">
-      <div class="tabs" role="tablist" id="tabs">
-        <button role="tab" data-tab="offen" aria-selected="true">Offen <span class="badge" data-count="offen"></span></button>
-        <button role="tab" data-tab="dran" aria-selected="false">Dran <span class="badge" data-count="dran"></span></button>
-        <button role="tab" data-tab="erledigt" aria-selected="false">Erledigt <span class="badge" data-count="erledigt"></span></button>
+    <!-- Werkzeugleiste -->
+    <section class="toolbar" aria-label="Filter und Sortierung">
+      <div class="search">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path>
+        </svg>
+        <input id="search" type="search" placeholder="Suchen in Titel und Kommentaren …" aria-label="Suchen">
+        <button type="button" class="btn btn-ghost btn-sm hidden" id="search-clear">Zurücksetzen</button>
       </div>
-      <div class="choice-row" id="sort-row">
-        <span class="choice-label">Sortierung</span>
-        <div class="seg" role="radiogroup" aria-label="Sortierung">
-          <input type="radio" name="sort" id="sort-wichtigkeit" value="wichtigkeit" checked>
-          <label for="sort-wichtigkeit">Nach Wichtigkeit</label>
-          <input type="radio" name="sort" id="sort-datum" value="datum">
-          <label for="sort-datum">Nach Datum</label>
+
+      <div class="toolbar-row">
+        <div class="choice-row">
+          <span class="choice-label">Wichtigkeit</span>
+          <div class="seg" role="radiogroup" aria-label="Nach Wichtigkeit filtern" id="filter-row">
+            <input type="radio" name="filter-prio" id="filter-prio-alle" value="alle" checked>
+            <label for="filter-prio-alle">Alle</label>
+            <input type="radio" name="filter-prio" id="filter-prio-hoch" value="hoch">
+            <label for="filter-prio-hoch">Hoch</label>
+            <input type="radio" name="filter-prio" id="filter-prio-mittel" value="mittel">
+            <label for="filter-prio-mittel">Mittel</label>
+            <input type="radio" name="filter-prio" id="filter-prio-niedrig" value="niedrig">
+            <label for="filter-prio-niedrig">Niedrig</label>
+          </div>
+        </div>
+
+        <div class="choice-row" id="sort-row">
+          <span class="choice-label">Sortierung</span>
+          <div class="seg" role="radiogroup" aria-label="Sortierung">
+            <input type="radio" name="sort" id="sort-wichtigkeit" value="wichtigkeit" checked>
+            <label for="sort-wichtigkeit">Nach Wichtigkeit</label>
+            <input type="radio" name="sort" id="sort-datum" value="datum">
+            <label for="sort-datum">Nach Datum</label>
+          </div>
+        </div>
+
+        <div class="toolbar-switches">
+          <label class="switch">
+            <input type="checkbox" id="hide-done">
+            <span>Erledigt ausblenden</span>
+          </label>
+          <button type="button" class="btn btn-sm" id="archive-toggle" aria-pressed="false">Archiv</button>
         </div>
       </div>
+    </section>
+
+    <div class="tabs" role="tablist" id="tabs">
+      <button role="tab" data-tab="offen" aria-selected="true">Offen <span class="badge" data-count="offen"></span></button>
+      <button role="tab" data-tab="dran" aria-selected="false">Dran <span class="badge" data-count="dran"></span></button>
+      <button role="tab" data-tab="erledigt" aria-selected="false">Erledigt <span class="badge" data-count="erledigt"></span></button>
     </div>
 
     <div class="board" id="board">
@@ -118,6 +202,18 @@
         <div class="stack" data-stack="erledigt"></div>
       </section>
     </div>
+
+    <section class="archive hidden" id="archive" aria-labelledby="archive-title">
+      <div class="column-head"><span class="eyebrow" id="archive-title">Archiv</span><span class="count" id="archive-count">0</span></div>
+      <div class="stack" data-stack="archiv"></div>
+    </section>
+
+    <section class="panel activity" id="activity">
+      <details id="activity-details">
+        <summary><span class="eyebrow">Aktivität</span></summary>
+        <ul class="activity-list" id="activity-list"></ul>
+      </details>
+    </section>
   </main>
 </div>
 
@@ -130,12 +226,24 @@
       <input id="edit-name" type="text" required>
     </div>
     <div class="field">
-      <label for="edit-url">Link (optional)</label>
+      <label for="edit-url">Link</label>
       <input id="edit-url" type="text" placeholder="https://…">
     </div>
     <div class="field">
-      <label for="edit-note">Notizen</label>
-      <textarea id="edit-note" placeholder="Was ist der Stand? Was fehlt noch?"></textarea>
+      <label for="edit-linktitle">Beschriftung des Links</label>
+      <input id="edit-linktitle" type="text" placeholder="leer lassen für automatische Kurzform">
+    </div>
+    <div class="field">
+      <label for="edit-url2">Zweiter Link</label>
+      <input id="edit-url2" type="text" placeholder="z. B. Ordner oder Ablage">
+    </div>
+    <div class="field">
+      <label for="edit-linktitle2">Beschriftung des zweiten Links</label>
+      <input id="edit-linktitle2" type="text" placeholder="leer lassen für automatische Kurzform">
+    </div>
+    <div class="field">
+      <label for="edit-due">Frist</label>
+      <input id="edit-due" type="date">
     </div>
     <div class="field">
       <label id="edit-prio-label">Wichtigkeit</label>
@@ -148,6 +256,17 @@
         <label for="edit-prio-niedrig">Niedrig</label>
       </div>
     </div>
+    <div class="field">
+      <label id="edit-assignee-label">Zuständig</label>
+      <div class="seg seg-wide" role="radiogroup" aria-labelledby="edit-assignee-label">
+        <input type="radio" name="edit-assignee" id="edit-assignee-jahvis" value="JAHVIS">
+        <label for="edit-assignee-jahvis">JAHVIS</label>
+        <input type="radio" name="edit-assignee" id="edit-assignee-kollege" value="Kollege">
+        <label for="edit-assignee-kollege">Kollege</label>
+        <input type="radio" name="edit-assignee" id="edit-assignee-offen" value="" checked>
+        <label for="edit-assignee-offen">Offen</label>
+      </div>
+    </div>
     <div class="dlg-actions">
       <button class="btn" value="cancel" formnovalidate>Abbrechen</button>
       <button class="btn btn-primary" value="save" id="edit-save">Speichern</button>
@@ -155,10 +274,27 @@
   </form>
 </dialog>
 
+<dialog id="comments-dialog">
+  <div class="dlg-body">
+    <h2 id="comments-title">Kommentare</h2>
+    <ul class="thread" id="thread"></ul>
+    <form id="comment-form">
+      <div class="field">
+        <label for="comment-text">Neuer Kommentar</label>
+        <textarea id="comment-text" placeholder="Was ist der Stand? Was fehlt noch?" required></textarea>
+      </div>
+      <div class="dlg-actions">
+        <button class="btn" type="button" id="comments-close">Schließen</button>
+        <button class="btn btn-primary" type="submit" id="comment-save">Hinzufügen</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
 <dialog id="who-dialog">
   <form method="dialog" class="dlg-body">
     <h2>Wer bist du?</h2>
-    <p class="dlg-note">Das steht später bei den Aufgaben und Notizen dabei.</p>
+    <p class="dlg-note">Das steht später bei den Aufgaben, Kommentaren und in der Aktivität dabei.</p>
     <div class="dlg-actions" style="flex-direction:column;align-items:stretch">
       <button class="btn btn-primary btn-block" value="JAHVIS">Ich bin JAHVIS</button>
       <button class="btn btn-block" value="Kollege">Ich bin der Kollege</button>
