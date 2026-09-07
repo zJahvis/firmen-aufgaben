@@ -80,9 +80,17 @@
     <div id="banner" class="banner hidden" role="alert"></div>
 
     <!-- Morgen-Übersicht -->
-    <section class="panel hidden" id="overview" aria-labelledby="overview-title">
-      <p class="eyebrow" id="overview-title">Morgen-Übersicht</p>
+    <section class="panel" id="overview" aria-labelledby="overview-title">
+      <div class="panel-head">
+        <p class="eyebrow">Heute</p>
+        <h2 class="panel-title" id="overview-title">Morgen-Übersicht</h2>
+        <span class="count" id="overview-count">0</span>
+      </div>
       <ul class="due-list" id="due-list"></ul>
+      <div class="panel-empty hidden" id="overview-empty">
+        <p id="overview-empty-text">Heute ist nichts fällig, und nichts ist überfällig.</p>
+        <button type="button" class="btn btn-sm" id="overview-set-due">Frist eintragen</button>
+      </div>
     </section>
 
     <!-- Neue Aufgabe -->
@@ -208,10 +216,17 @@
       <div class="stack" data-stack="archiv"></div>
     </section>
 
-    <section class="panel activity" id="activity">
-      <details id="activity-details">
-        <summary><span class="eyebrow">Aktivität</span></summary>
+    <section class="panel activity" id="activity" aria-labelledby="activity-title">
+      <details id="activity-details" open>
+        <summary>
+          <span class="panel-head">
+            <span class="eyebrow">Verlauf</span>
+            <span class="panel-title" id="activity-title">Aktivität</span>
+            <span class="count" id="activity-count">0</span>
+          </span>
+        </summary>
         <ul class="activity-list" id="activity-list"></ul>
+        <p class="panel-empty" id="activity-empty">Noch keine Einträge. Sobald jemand etwas anlegt, verschiebt oder kommentiert, steht es hier.</p>
       </details>
     </section>
   </main>

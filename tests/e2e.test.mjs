@@ -134,6 +134,28 @@ try {
     await waitFor(() => fake.file !== null, 'Anlegen von board.json');
   });
 
+  await step('Morgen-Uebersicht und Aktivitaet sind auch auf einer leeren Pinnwand da', async () => {
+    await page.waitForSelector('#overview', { state: 'visible' });
+    assert.equal(await page.locator('#overview-title').textContent(), 'Morgen-Übersicht');
+    assert.equal(await page.locator('#overview-count').textContent(), '0');
+    assert.match(await page.locator('#overview-empty-text').textContent(), /noch keine Aufgabe hat eine Frist/i);
+    assert.ok(await page.locator('#overview-set-due').isVisible(), 'Weg zur Frist wird angeboten');
+
+    await page.waitForSelector('#activity', { state: 'visible' });
+    assert.equal(await page.locator('#activity-title').textContent(), 'Aktivität');
+    assert.ok(await page.locator('#activity-details').evaluate((el) => el.open), 'aufgeklappt statt zugeklappt');
+    assert.ok(await page.locator('#activity-empty').isVisible());
+  });
+
+  await step('„Frist eintragen" klappt die weiteren Angaben auf', async () => {
+    assert.equal(await page.locator('#new-more').evaluate((el) => el.open), false);
+    await page.click('#overview-set-due');
+    await page.waitForFunction(() => document.querySelector('#new-more').open);
+    assert.ok(await page.locator('#new-due').isVisible());
+    // wieder zuklappen, damit die folgenden Schritte den normalen Weg gehen
+    await page.locator('#new-more').evaluate((el) => { el.open = false; });
+  });
+
   await step('Aufgabe anlegen: Mittel, JAHVIS zustaendig, Eintrag in der Aktivitaet', async () => {
     await page.fill('#new-title', 'Angebot für Meier schreiben');
     await page.click('#new-form button[type=submit]');
@@ -152,6 +174,10 @@ try {
     const eintrag = board().activity[0];
     assert.equal(eintrag.kind, 'angelegt');
     assert.equal(eintrag.actor, 'JAHVIS');
+    await page.waitForFunction(() => document.querySelector('#activity-count').textContent === '1');
+    assert.ok(await page.locator('#activity-empty').isHidden());
+    assert.match(await page.locator('#activity-list li .activity-text').first().textContent(),
+      /JAHVIS hat angelegt: Angebot für Meier schreiben/);
   });
 
   await step('Weitere Angaben: zwei getrennte Links und eine Frist', async () => {
@@ -179,7 +205,7 @@ try {
   });
 
   await step('Morgen-Uebersicht zeigt Ueberfaelliges oben', async () => {
-    await page.waitForSelector('#overview:not(.hidden)');
+    await page.waitForFunction(() => document.querySelector('#overview-count').textContent === '1');
     assert.match(await page.locator('#due-list .due-title').first().textContent(), /Preisliste/);
     await page.fill('#new-title', 'Heute anrufen');
     await page.fill('#new-due', heute);
@@ -420,6 +446,43 @@ try {
     await p3.waitForSelector('.board.two-columns');
     assert.ok(await p3.locator('[data-col="erledigt"]').isHidden(), 'Erledigt ist ausgeblendet');
     await wide.close();
+  });
+
+  await step('Pinnwand von vor dieser Erweiterung zeigt trotzdem einen Verlauf', async () => {
+    const gesichert = { file: fake.file, sha: fake.sha };
+    // Aufgaben und Notizen, aber kein Ereignisprotokoll – genau der gemeldete Fall.
+    fake.file = JSON.stringify({
+      version: 2,
+      tasks: [{
+        id: 'alt-99', title: 'Altbestand prüfen', url: '', note: 'Liegt seit Januar',
+        status: 'offen', author: 'Kollege', createdAt: '2026-01-02T09:00:00.000Z',
+        updatedAt: '2026-01-02T09:00:00.000Z', doneAt: null, deleted: false,
+      }],
+      activity: [],
+    });
+    fake.sha = 'sha-altbestand';
+
+    const alt = await browser.newContext({ viewport: { width: 390, height: 900 } });
+    const p4 = await alt.newPage();
+    await installFakeGithub(p4);
+    await p4.goto(`${base}/index.html#c=${sealed}`);
+    await p4.fill('#pin-input', PIN);
+    await p4.click('#pin-submit');
+    await p4.waitForSelector('#app:not(.hidden)', { timeout: 15000 });
+    await p4.locator('#who-dialog button[value="JAHVIS"]').click();
+
+    await p4.waitForFunction(() => document.querySelectorAll('#activity-list li').length === 2);
+    const zeilen = await p4.locator('#activity-list .activity-text').allTextContents();
+    assert.deepEqual(zeilen, [
+      'Kollege hat kommentiert: Altbestand prüfen',
+      'Kollege hat angelegt: Altbestand prüfen',
+    ], 'der Verlauf wird aus den vorhandenen Daten abgeleitet');
+    assert.ok(await p4.locator('#overview').isVisible(), 'die Übersicht bleibt sichtbar');
+    assert.match(await p4.locator('#overview-empty-text').textContent(), /noch keine Aufgabe hat eine Frist/i);
+
+    await alt.close();
+    fake.file = gesichert.file;
+    fake.sha = gesichert.sha;
   });
 
   console.log(`\n${passed} Oberflaechentests bestanden.`);

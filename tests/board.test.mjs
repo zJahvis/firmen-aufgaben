@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {
   emptyBoard, createTask, touch, addComment, mergeBoards, sanitizeBoard,
   selectTasks, archivedTasks, dueOverview, unseenActivity, activityText, makeActivity,
-  normalizeUrl, isSafeLink, linkLabel, sortTasks, matchesQuery,
+  normalizeUrl, isSafeLink, linkLabel, sortTasks, matchesQuery, activityFeed,
   PRIORITIES, PRIORITY_LABELS, DEFAULT_PRIORITY, normalizePriority, normalizeAssignee,
   todayIso, daysUntil, dueState, dueLabel, formatDate, normalizeDue,
   orderBetween, orderForIndex,
@@ -232,6 +232,62 @@ test('Aktivitaet wird zusammengefuehrt, sortiert und gekappt', () => {
   assert.equal(m.activity.length, 60, 'auf 60 Einträge begrenzt');
   assert.equal(m.activity[0].id, 'e79', 'neueste zuerst');
   assert.ok(m.activity[0].at > m.activity[1].at);
+});
+
+test('Verlauf zeigt auch Aufgaben von vor dieser Erweiterung', () => {
+  // So sieht eine Pinnwand aus, die es vor dem Ereignisprotokoll schon gab:
+  // Aufgaben und Notizen sind da, aufgezeichnete Ereignisse gibt es keine.
+  const board = sanitizeBoard({
+    activity: [],
+    tasks: [
+      { id: 't1', title: 'Rechnung prüfen', author: 'Kollege', note: 'Beleg fehlt',
+        createdAt: '2026-01-02T09:00:00.000Z', updatedAt: '2026-01-02T09:00:00.000Z' },
+      { id: 't2', title: 'Angebot schreiben', author: 'JAHVIS',
+        createdAt: '2026-01-03T09:00:00.000Z', updatedAt: '2026-01-03T09:00:00.000Z' },
+    ],
+  });
+  const verlauf = activityFeed(board);
+  assert.deepEqual(verlauf.map(activityText), [
+    'JAHVIS hat angelegt: Angebot schreiben',
+    'Kollege hat kommentiert: Rechnung prüfen',
+    'Kollege hat angelegt: Rechnung prüfen',
+  ]);
+});
+
+test('Verlauf zaehlt aufgezeichnete Ereignisse nicht doppelt', () => {
+  // Der aufgezeichnete Zeitstempel weicht um Millisekunden vom Anlagezeitpunkt
+  // ab – gezaehlt wird deshalb je Aufgabe und Art, nicht nach Uhrzeit.
+  const board = sanitizeBoard({
+    tasks: [{ id: 't1', title: 'A', author: 'Kollege', createdAt: '2026-01-02T09:00:00.000Z',
+      comments: [
+        { id: 'c1', author: 'Kollege', text: 'alt', at: '2026-01-02T10:00:00.000Z' },
+        { id: 'c2', author: 'JAHVIS', text: 'neu', at: '2026-01-02T11:00:00.000Z' },
+      ] }],
+    activity: [
+      { id: 'e1', at: '2026-01-02T09:00:00.417Z', actor: 'Kollege', kind: 'angelegt', taskId: 't1', title: 'A' },
+      { id: 'e2', at: '2026-01-02T11:00:00.812Z', actor: 'JAHVIS', kind: 'kommentiert', taskId: 't1', title: 'A' },
+    ],
+  });
+  const verlauf = activityFeed(board);
+  assert.equal(verlauf.length, 3, 'zwei aufgezeichnete plus der eine unbekannte Kommentar');
+  assert.deepEqual(verlauf.map((e) => e.id), ['e2', 'abgeleitet-c1', 'e1']);
+});
+
+test('Verlauf laesst Geloeschtes weg und haelt die Obergrenze ein', () => {
+  const board = sanitizeBoard({
+    activity: [],
+    tasks: [
+      { id: 'weg', title: 'Geloescht', author: 'X', deleted: true, createdAt: '2026-01-01T09:00:00.000Z' },
+      ...Array.from({ length: 30 }, (_, i) => ({
+        id: 't' + i, title: 'T' + i, author: 'X',
+        createdAt: new Date(Date.UTC(2026, 0, 2, 0, i)).toISOString(),
+      })),
+    ],
+  });
+  const verlauf = activityFeed(board, 5);
+  assert.equal(verlauf.length, 5);
+  assert.equal(verlauf[0].title, 'T29', 'neueste zuerst');
+  assert.equal(verlauf.some((e) => e.title === 'Geloescht'), false);
 });
 
 test('neue Aktivitaet anderer wird als ungelesen erkannt', () => {

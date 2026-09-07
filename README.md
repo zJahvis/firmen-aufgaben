@@ -55,6 +55,10 @@ gilt nie als überfällig. Ganz oben auf der Seite steht die **Morgen-Übersicht
 mit allem, was heute fällig oder überfällig ist – überfällig zuerst. Ein Klick
 darauf springt zur Karte.
 
+Die Übersicht ist **immer sichtbar**, auch wenn nichts ansteht: dann sagt sie
+das und bietet den Weg zur ersten Frist an. Nur so ist sie auffindbar – eine
+Fläche, die sich bei leerem Inhalt versteckt, existiert für die Nutzer nicht.
+
 ### Kommentare statt einer Notiz
 
 Der Verlauf wird nur ergänzt, nie überschrieben. Auf der Karte steht der jüngste
@@ -95,9 +99,20 @@ Klick wiederherstellbar. Nur im Archiv gibt es zusätzlich *Endgültig löschen*
 
 ### Aktivität und Hinweise
 
-Unter der Pinnwand steht eine aufklappbare Aktivitätszeile. Was seit dem letzten
-Besuch von der anderen Person kam, zählt der goldene **N neu**-Knopf in der
-Kopfzeile; betroffene Karten tragen eine *Neu*-Marke. Ein Klick hakt alles ab.
+Unter der Pinnwand steht die Aktivitätszeile – standardmäßig aufgeklappt, mit
+Überschrift und Zähler; ob sie auf- oder zugeklappt ist, merkt sich der Browser.
+Sie ist ebenfalls immer sichtbar.
+
+Für eine Pinnwand, die es schon vor dem Ereignisprotokoll gab, leitet die Seite
+den Verlauf zusätzlich aus den vorhandenen Daten ab („angelegt" aus
+`createdAt` und `author`, „kommentiert" aus den Kommentaren). Abgeleitetes wird
+nur angezeigt, nie gespeichert, und aufgezeichnete Ereignisse zählen nicht
+doppelt: verglichen wird je Aufgabe und Art, nicht nach Zeitstempel.
+
+Was seit dem letzten Besuch von der anderen Person kam, zählt der goldene
+**N neu**-Knopf in der Kopfzeile; betroffene Karten tragen eine *Neu*-Marke.
+Ein Klick hakt alles ab. Der Zähler stützt sich nur auf aufgezeichnete
+Ereignisse, nicht auf abgeleitete.
 
 Über die Glocke lassen sich zusätzlich **Browser-Hinweise** einschalten.
 

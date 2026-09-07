@@ -2,7 +2,7 @@ import { openJson } from './crypto.js';
 import { GithubStore, ConflictError, AuthError } from './store.js';
 import {
   STATES, STATE_LABELS, emptyBoard, createTask, mergeBoards, sanitizeBoard,
-  selectTasks, archivedTasks, dueOverview, unseenActivity, activityText,
+  selectTasks, archivedTasks, dueOverview, unseenActivity, activityText, activityFeed,
   touch, addComment, makeActivity, normalizeUrl, isSafeLink, linkLabel,
   PRIORITY_LABELS, DEFAULT_PRIORITY, normalizePriority,
   ASSIGNEE_LABELS, ASSIGNEE_CHOICES, DEFAULT_ASSIGNEE, normalizeAssignee,
@@ -19,6 +19,7 @@ const LS_PRIO = 'fa.prio';
 const LS_HIDEDONE = 'fa.hidedone';
 const LS_SEEN = 'fa.seen';
 const LS_NOTIFY = 'fa.notify';
+const LS_ACTIVITY_OPEN = 'fa.activity';
 const POLL_MS = 10000;
 
 const $ = (sel) => document.querySelector(sel);
@@ -226,6 +227,17 @@ function wireUi() {
     if (!btn) return;
     state.tab = btn.dataset.tab;
     render();
+  });
+
+  $('#activity-details').open = localStorage.getItem(LS_ACTIVITY_OPEN) !== '0';
+  $('#activity-details').addEventListener('toggle', (ev) => {
+    localStorage.setItem(LS_ACTIVITY_OPEN, ev.target.open ? '1' : '0');
+  });
+
+  $('#overview-set-due').addEventListener('click', () => {
+    $('#new-more').open = true;
+    $('#new-due').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    $('#new-title').focus();
   });
 
   $('#news-chip').addEventListener('click', markSeen);
@@ -625,7 +637,15 @@ function renderArchive(neu) {
 
 function renderOverview() {
   const fällig = dueOverview(state.board, state.today);
-  $('#overview').classList.toggle('hidden', fällig.length === 0);
+  const mitFrist = (state.board.tasks || []).some((t) => !t.deleted && !t.archived && t.due);
+
+  $('#overview-count').textContent = String(fällig.length);
+  $('#overview-empty').classList.toggle('hidden', fällig.length > 0);
+  $('#overview-empty-text').textContent = mitFrist
+    ? 'Heute ist nichts fällig, und nichts ist überfällig.'
+    : 'Noch keine Aufgabe hat eine Frist. Beim Anlegen unter „Weitere Angaben" lässt sich eine setzen.';
+  $('#overview-set-due').classList.toggle('hidden', mitFrist);
+
   const liste = $('#due-list');
   liste.replaceChildren(...fällig.map((task) => {
     const li = document.createElement('li');
@@ -662,8 +682,9 @@ function jumpTo(task) {
 }
 
 function renderActivity() {
-  const eintraege = (state.board.activity || []).slice(0, 15);
-  $('#activity').classList.toggle('hidden', eintraege.length === 0);
+  const eintraege = activityFeed(state.board, 15);
+  $('#activity-count').textContent = String(eintraege.length);
+  $('#activity-empty').classList.toggle('hidden', eintraege.length > 0);
   $('#activity-list').replaceChildren(...eintraege.map((e) => {
     const li = document.createElement('li');
     const zeit = document.createElement('span');

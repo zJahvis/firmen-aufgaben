@@ -454,6 +454,50 @@ export function dueOverview(board, today) {
     .sort((a, b) => (a.due === b.due ? String(a.createdAt).localeCompare(String(b.createdAt)) : a.due.localeCompare(b.due)));
 }
 
+/**
+ * Verlauf für die Anzeige. Neben den aufgezeichneten Ereignissen werden
+ * Einträge aus den vorhandenen Aufgaben abgeleitet – sonst bliebe die
+ * Aktivitätszeile auf einer Pinnwand leer, die es schon vor dieser
+ * Erweiterung gab. Abgeleitetes wird nur angezeigt, nie gespeichert.
+ */
+export function activityFeed(board, limit = 20) {
+  const echte = (board?.activity || []).filter((e) => e && typeof e.at === 'string');
+
+  // Wie viele Ereignisse je Aufgabe und Art bereits aufgezeichnet sind.
+  const gezaehlt = new Map();
+  for (const e of echte) {
+    const schluessel = `${e.taskId}|${e.kind}`;
+    gezaehlt.set(schluessel, (gezaehlt.get(schluessel) || 0) + 1);
+  }
+
+  const abgeleitet = [];
+  for (const t of board?.tasks || []) {
+    if (t.deleted) continue;
+
+    // Angelegt wird eine Aufgabe genau einmal.
+    if (!gezaehlt.get(`${t.id}|angelegt`) && t.createdAt) {
+      abgeleitet.push({
+        id: `abgeleitet-${t.id}-angelegt`, at: t.createdAt, actor: t.author,
+        kind: 'angelegt', taskId: t.id, title: t.title,
+      });
+    }
+
+    // Aufgezeichnet wurden die jüngsten Kommentare; die älteren werden ergänzt.
+    const kommentare = t.comments || [];
+    const fehlende = Math.max(0, kommentare.length - (gezaehlt.get(`${t.id}|kommentiert`) || 0));
+    for (const c of kommentare.slice(0, fehlende)) {
+      abgeleitet.push({
+        id: `abgeleitet-${c.id}`, at: c.at, actor: c.author,
+        kind: 'kommentiert', taskId: t.id, title: t.title,
+      });
+    }
+  }
+
+  return [...echte, ...abgeleitet]
+    .sort((a, b) => (a.at === b.at ? b.id.localeCompare(a.id) : b.at.localeCompare(a.at)))
+    .slice(0, limit);
+}
+
 /** Neue Aktivität anderer seit dem letzten Besuch. */
 export function unseenActivity(board, { since, me }) {
   if (!since) return [];
