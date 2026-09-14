@@ -5,7 +5,7 @@ import {
   selectTasks, archivedTasks, dueOverview, unseenActivity, activityText, activityFeed,
   touch, addComment, makeActivity, normalizeUrl, isSafeLink, linkLabel,
   PRIORITY_LABELS, DEFAULT_PRIORITY, normalizePriority,
-  ASSIGNEE_LABELS, ASSIGNEE_CHOICES, DEFAULT_ASSIGNEE, normalizeAssignee,
+  ASSIGNEE_LABELS, ASSIGNEE_CHOICES, DEFAULT_ASSIGNEE, normalizeAssignee, PEOPLE, personName,
   SORT_MODES, DEFAULT_SORT, todayIso, dueLabel, dueState, formatDate,
   orderForIndex,
 } from './board.js';
@@ -16,6 +16,7 @@ const LS_ME = 'fa.me';
 const LS_CACHE = 'fa.cache';
 const LS_SORT = 'fa.sort';
 const LS_PRIO = 'fa.prio';
+const LS_ASSIGNEE = 'fa.assignee';
 const LS_HIDEDONE = 'fa.hidedone';
 const LS_SEEN = 'fa.seen';
 const LS_NOTIFY = 'fa.notify';
@@ -42,10 +43,15 @@ const state = {
   sort: SORT_MODES.includes(localStorage.getItem(LS_SORT)) ? localStorage.getItem(LS_SORT) : DEFAULT_SORT,
   filterPrio: ['alle', ...Object.keys(PRIORITY_LABELS)].includes(localStorage.getItem(LS_PRIO))
     ? localStorage.getItem(LS_PRIO) : 'alle',
+  filterAssignee: ['alle', 'offen', ...PEOPLE].includes(localStorage.getItem(LS_ASSIGNEE))
+    ? localStorage.getItem(LS_ASSIGNEE) : 'alle',
   query: '',
   hideDone: localStorage.getItem(LS_HIDEDONE) === '1',
   showArchive: false,
-  me: localStorage.getItem(LS_ME) || '',
+  // Auch die eigene Kennung wird umgeschlüsselt: Wer sich früher als „Kollege"
+  // angemeldet hat, ist jetzt Alex. Ohne das zählte seine eigene Aktivität für
+  // ihn selbst als „neu", denn aufgezeichnet wird sie bereits als „Alex".
+  me: personName(localStorage.getItem(LS_ME) || ''),
   seenAt: localStorage.getItem(LS_SEEN) || '',
   notify: localStorage.getItem(LS_NOTIFY) === '1',
   today: todayIso(),
@@ -58,6 +64,8 @@ let dirty = false;
 let saveTimer = null;
 let pollTimer = null;
 const notified = new Set();
+const ASSIGNEE_NONE = '__offen';
+let assigningId = null;
 let firstSync = true;
 
 /* ------------------------------------------------------------------ */
@@ -76,6 +84,9 @@ function readSealedConfig() {
 }
 
 function boot() {
+  if (state.me && state.me !== localStorage.getItem(LS_ME)) {
+    localStorage.setItem(LS_ME, state.me);
+  }
   const sealed = readSealedConfig();
   if (!sealed) {
     $('#pin-form').classList.add('hidden');
@@ -202,6 +213,12 @@ function wireUi() {
     render();
   });
 
+  $('#filter-assignee-row').addEventListener('change', (ev) => {
+    state.filterAssignee = ev.target.value;
+    localStorage.setItem(LS_ASSIGNEE, state.filterAssignee);
+    render();
+  });
+
   $('#sort-row').addEventListener('change', (ev) => {
     const mode = ev.target.value;
     if (!SORT_MODES.includes(mode)) return;
@@ -254,12 +271,22 @@ function wireUi() {
   $('#edit-dialog').addEventListener('close', onEditClose);
   $('#who-dialog').addEventListener('close', (ev) => {
     const val = ev.target.returnValue;
-    if (val === 'JAHVIS' || val === 'Kollege') {
+    if (PEOPLE.includes(val)) {
       state.me = val;
       localStorage.setItem(LS_ME, val);
       updateWhoChip();
       render();
     }
+  });
+
+  $('#assignee-dialog').addEventListener('close', (ev) => {
+    const val = ev.target.returnValue;
+    const id = assigningId;
+    assigningId = null;
+    if (!id || !val) return;
+    const wer = val === ASSIGNEE_NONE ? '' : val;
+    if (!ASSIGNEE_CHOICES.includes(wer)) return;
+    updateTask(id, { assignee: wer }, 'geaendert');
   });
 
   $('#comments-close').addEventListener('click', () => $('#comments-dialog').close());
@@ -404,6 +431,7 @@ function render() {
       status,
       sort: state.sort,
       priority: state.filterPrio,
+      assignee: state.filterAssignee,
       query: state.query,
     });
     state.rendered[status] = tasks;
@@ -544,8 +572,8 @@ function renderCard(task, neu) {
   zuständig.type = 'button';
   zuständig.className = `assignee assignee-${normalizeAssignee(task.assignee) || 'offen'}`;
   zuständig.textContent = 'Zuständig: ' + ASSIGNEE_LABELS[normalizeAssignee(task.assignee)];
-  zuständig.title = 'Zuständigkeit weiterschalten';
-  zuständig.addEventListener('click', () => cycleAssignee(task.id));
+  zuständig.title = 'Zuständigkeit ändern';
+  zuständig.addEventListener('click', () => openAssignee(task.id));
   card.append(zuständig);
 
   const letzter = (task.comments || [])[task.comments.length - 1];
@@ -818,12 +846,30 @@ function removeForever(id) {
   updateTask(id, { deleted: true }, null);
 }
 
-function cycleAssignee(id) {
+/**
+ * Bei drei Personen wäre Durchschalten vier Klicks bis zurück zum Anfang.
+ * Deshalb ein Auswahlmenü: ein Klick, eine Entscheidung.
+ */
+function openAssignee(id) {
   const task = state.board.tasks.find((t) => t.id === id);
   if (!task) return;
+  assigningId = id;
+  $('#assignee-task').textContent = task.title;
+
   const jetzt = normalizeAssignee(task.assignee);
-  const nächster = ASSIGNEE_CHOICES[(ASSIGNEE_CHOICES.indexOf(jetzt) + 1) % ASSIGNEE_CHOICES.length];
-  updateTask(id, { assignee: nächster }, 'geaendert');
+  const knöpfe = ASSIGNEE_CHOICES.map((wer) => {
+    const b = document.createElement('button');
+    // Ein leerer Wert wäre von „mit Escape abgebrochen" nicht zu unterscheiden,
+    // deshalb bekommt „Offen" eine eigene Marke.
+    b.value = wer === '' ? ASSIGNEE_NONE : wer;
+    b.className = 'btn btn-block' + (wer === jetzt ? ' btn-primary' : '');
+    b.textContent = wer === '' ? 'Niemand (offen)' : ASSIGNEE_LABELS[wer];
+    return b;
+  });
+  $('#assignee-choices').replaceChildren(...knöpfe);
+
+  const dlg = $('#assignee-dialog');
+  if (typeof dlg.showModal === 'function') dlg.showModal();
 }
 
 /* ------------------------------------------------------------------ */

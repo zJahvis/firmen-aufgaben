@@ -5,7 +5,7 @@ import {
   normalizeUrl, isSafeLink, linkLabel, sortTasks, matchesQuery, activityFeed,
   PRIORITIES, PRIORITY_LABELS, DEFAULT_PRIORITY, normalizePriority, normalizeAssignee,
   todayIso, daysUntil, dueState, dueLabel, formatDate, normalizeDue,
-  orderBetween, orderForIndex,
+  orderBetween, orderForIndex, personName, matchesAssignee, PEOPLE, DEFAULT_ASSIGNEE,
 } from '../assets/board.js';
 
 let passed = 0;
@@ -25,11 +25,11 @@ console.log('board.js');
 /* ---------------- Grundlagen ---------------- */
 
 test('createTask setzt sinnvolle Vorgaben', () => {
-  const t = createTask({ title: '  Angebot schreiben ', author: 'Kollege' });
+  const t = createTask({ title: '  Angebot schreiben ', author: 'Alex' });
   assert.equal(t.title, 'Angebot schreiben');
   assert.equal(t.status, 'offen');
   assert.equal(t.priority, 'mittel');
-  assert.equal(t.assignee, 'JAHVIS');
+  assert.equal(t.assignee, '');
   assert.equal(t.archived, false);
   assert.equal(t.deleted, false);
   assert.deepEqual(t.comments, []);
@@ -54,7 +54,7 @@ test('deutsche Bezeichnungen der Wichtigkeit', () => {
   assert.equal(DEFAULT_PRIORITY, 'mittel');
   assert.equal(normalizePriority('dringend'), 'mittel');
   assert.equal(normalizeAssignee('Chef'), '');
-  assert.equal(normalizeAssignee('Kollege'), 'Kollege');
+  assert.equal(normalizeAssignee('Alex'), 'Alex');
 });
 
 /* ---------------- Fristen ---------------- */
@@ -131,10 +131,10 @@ test('zwei getrennte Links werden gespeichert', () => {
 
 test('Kommentare werden angehaengt, nie ersetzt', () => {
   let t = createTask({ title: 'A' });
-  t = addComment(t, { author: 'Kollege', text: 'Erster' });
+  t = addComment(t, { author: 'Alex', text: 'Erster' });
   t = addComment(t, { author: 'JAHVIS', text: 'Zweiter' });
   assert.deepEqual(t.comments.map((c) => c.text), ['Erster', 'Zweiter']);
-  assert.equal(t.comments[0].author, 'Kollege');
+  assert.equal(t.comments[0].author, 'Alex');
 });
 
 test('Kommentare in derselben Millisekunde behalten ihre Reihenfolge', () => {
@@ -154,14 +154,14 @@ test('leere Kommentare werden verworfen', () => {
 
 test('alte Notiz wird zum ersten Kommentar – und zwar immer gleich', () => {
   const alt = {
-    id: 'a1', title: 'Alt', note: 'Warte auf Freigabe', author: 'Kollege',
+    id: 'a1', title: 'Alt', note: 'Warte auf Freigabe', author: 'Alex',
     status: 'offen', createdAt: '2026-01-01T10:00:00.000Z', updatedAt: '2026-01-02T10:00:00.000Z',
   };
   const eins = sanitizeBoard({ tasks: [alt] }).tasks[0];
   const zwei = sanitizeBoard({ tasks: [alt] }).tasks[0];
   assert.equal(eins.comments.length, 1);
   assert.equal(eins.comments[0].text, 'Warte auf Freigabe');
-  assert.equal(eins.comments[0].author, 'Kollege');
+  assert.equal(eins.comments[0].author, 'Alex');
   assert.equal(eins.comments[0].id, 'a1-notiz');
   assert.deepEqual(eins, zwei, 'zweimal aufbereiten muss dasselbe ergeben');
   assert.equal('note' in eins, false, 'das alte Feld wird nicht weitergeschleppt');
@@ -178,7 +178,7 @@ test('vorhandene Kommentare verdraengen die Notiz-Wanderung', () => {
 test('gleichzeitige Kommentare gehen beim Zusammenfuehren nicht verloren', () => {
   const basis = createTask({ title: 'A' });
   const remote = { tasks: [{ ...basis, updatedAt: '2026-02-01T09:00:00.000Z',
-    comments: [{ id: 'c-remote', author: 'Kollege', text: 'von drüben', at: '2026-02-01T09:00:00.000Z' }] }] };
+    comments: [{ id: 'c-remote', author: 'Alex', text: 'von drüben', at: '2026-02-01T09:00:00.000Z' }] }] };
   const local = { tasks: [{ ...basis, updatedAt: '2026-02-01T09:05:00.000Z',
     comments: [{ id: 'c-local', author: 'JAHVIS', text: 'von hier', at: '2026-02-01T09:05:00.000Z' }] }] };
   const zusammen = mergeBoards(remote, local).tasks[0];
@@ -220,7 +220,7 @@ test('gespeichert wird unabhaengig von der Ansicht immer gleich sortiert', () =>
 
 test('Aktivitaet wird lesbar formuliert', () => {
   const t = mk('Angebot Meier');
-  assert.equal(activityText(makeActivity('angelegt', t, 'Kollege')), 'Kollege hat angelegt: Angebot Meier');
+  assert.equal(activityText(makeActivity('angelegt', t, 'Alex')), 'Alex hat angelegt: Angebot Meier');
   assert.equal(activityText(makeActivity('erledigt', t, 'JAHVIS')), 'JAHVIS hat erledigt: Angebot Meier');
 });
 
@@ -240,7 +240,7 @@ test('Verlauf zeigt auch Aufgaben von vor dieser Erweiterung', () => {
   const board = sanitizeBoard({
     activity: [],
     tasks: [
-      { id: 't1', title: 'Rechnung prüfen', author: 'Kollege', note: 'Beleg fehlt',
+      { id: 't1', title: 'Rechnung prüfen', author: 'Alex', note: 'Beleg fehlt',
         createdAt: '2026-01-02T09:00:00.000Z', updatedAt: '2026-01-02T09:00:00.000Z' },
       { id: 't2', title: 'Angebot schreiben', author: 'JAHVIS',
         createdAt: '2026-01-03T09:00:00.000Z', updatedAt: '2026-01-03T09:00:00.000Z' },
@@ -249,8 +249,8 @@ test('Verlauf zeigt auch Aufgaben von vor dieser Erweiterung', () => {
   const verlauf = activityFeed(board);
   assert.deepEqual(verlauf.map(activityText), [
     'JAHVIS hat angelegt: Angebot schreiben',
-    'Kollege hat kommentiert: Rechnung prüfen',
-    'Kollege hat angelegt: Rechnung prüfen',
+    'Alex hat kommentiert: Rechnung prüfen',
+    'Alex hat angelegt: Rechnung prüfen',
   ]);
 });
 
@@ -258,13 +258,13 @@ test('Verlauf zaehlt aufgezeichnete Ereignisse nicht doppelt', () => {
   // Der aufgezeichnete Zeitstempel weicht um Millisekunden vom Anlagezeitpunkt
   // ab – gezaehlt wird deshalb je Aufgabe und Art, nicht nach Uhrzeit.
   const board = sanitizeBoard({
-    tasks: [{ id: 't1', title: 'A', author: 'Kollege', createdAt: '2026-01-02T09:00:00.000Z',
+    tasks: [{ id: 't1', title: 'A', author: 'Alex', createdAt: '2026-01-02T09:00:00.000Z',
       comments: [
-        { id: 'c1', author: 'Kollege', text: 'alt', at: '2026-01-02T10:00:00.000Z' },
+        { id: 'c1', author: 'Alex', text: 'alt', at: '2026-01-02T10:00:00.000Z' },
         { id: 'c2', author: 'JAHVIS', text: 'neu', at: '2026-01-02T11:00:00.000Z' },
       ] }],
     activity: [
-      { id: 'e1', at: '2026-01-02T09:00:00.417Z', actor: 'Kollege', kind: 'angelegt', taskId: 't1', title: 'A' },
+      { id: 'e1', at: '2026-01-02T09:00:00.417Z', actor: 'Alex', kind: 'angelegt', taskId: 't1', title: 'A' },
       { id: 'e2', at: '2026-01-02T11:00:00.812Z', actor: 'JAHVIS', kind: 'kommentiert', taskId: 't1', title: 'A' },
     ],
   });
@@ -292,9 +292,9 @@ test('Verlauf laesst Geloeschtes weg und haelt die Obergrenze ein', () => {
 
 test('neue Aktivitaet anderer wird als ungelesen erkannt', () => {
   const board = { activity: [
-    { id: 'a', at: '2026-05-02T10:00:00.000Z', actor: 'Kollege', kind: 'angelegt', taskId: 't1', title: 'T' },
+    { id: 'a', at: '2026-05-02T10:00:00.000Z', actor: 'Alex', kind: 'angelegt', taskId: 't1', title: 'T' },
     { id: 'b', at: '2026-05-02T10:00:00.000Z', actor: 'JAHVIS', kind: 'angelegt', taskId: 't2', title: 'T' },
-    { id: 'c', at: '2026-05-01T10:00:00.000Z', actor: 'Kollege', kind: 'angelegt', taskId: 't3', title: 'T' },
+    { id: 'c', at: '2026-05-01T10:00:00.000Z', actor: 'Alex', kind: 'angelegt', taskId: 't3', title: 'T' },
   ] };
   const neu = unseenActivity(board, { since: '2026-05-02T00:00:00.000Z', me: 'JAHVIS' });
   assert.deepEqual(neu.map((e) => e.id), ['a'], 'eigene und alte Einträge zählen nicht');
@@ -341,7 +341,7 @@ test('Statusfilter und Wichtigkeitsfilter greifen zusammen', () => {
 
 test('Suche greift auf Titel, Links und Kommentare zu', () => {
   const t = addComment(mk('Angebot Meier', { url: 'https://example.com/preisliste' }), {
-    author: 'Kollege', text: 'Freigabe vom Chef fehlt',
+    author: 'Alex', text: 'Freigabe vom Chef fehlt',
   });
   assert.equal(matchesQuery(t, 'meier'), true);
   assert.equal(matchesQuery(t, 'preisliste'), true);
@@ -394,6 +394,97 @@ test('sanitizeBoard repariert kaputte Daten', () => {
   assert.equal(s.tasks[0].title, '');
   assert.equal(s.tasks[1].status, 'offen');
   assert.deepEqual(s.activity, []);
+});
+
+/* ---------------- Drei Personen und die Umschluesselung ---------------- */
+
+test('die Pinnwand kennt JAHVIS, Alex und Aaron', () => {
+  assert.deepEqual(PEOPLE, ['JAHVIS', 'Alex', 'Aaron']);
+});
+
+test('neue Aufgaben gehoeren zunaechst niemandem', () => {
+  assert.equal(DEFAULT_ASSIGNEE, '');
+  assert.equal(createTask({ title: 'Frisch' }).assignee, '');
+});
+
+test('aus dem alten Kollegen wird Alex', () => {
+  assert.equal(personName('Kollege'), 'Alex');
+  assert.equal(normalizeAssignee('Kollege'), 'Alex');
+});
+
+test('bestehende Namen bleiben unveraendert', () => {
+  for (const name of PEOPLE) assert.equal(personName(name), name);
+  assert.equal(personName(''), '');
+  assert.equal(personName(undefined), '');
+  assert.equal(normalizeAssignee('Aaron'), 'Aaron');
+  assert.equal(normalizeAssignee('Fremder'), '', 'Unbekannte gelten als offen');
+});
+
+test('alte Aufgaben verlieren beim Umbenennen ihre Zustaendigkeit nicht', () => {
+  const s = sanitizeBoard({ tasks: [{
+    id: 'alt', title: 'Angebot Meier', assignee: 'Kollege', author: 'Kollege',
+    createdAt: '2026-01-02T08:00:00.000Z', updatedAt: '2026-01-02T08:00:00.000Z',
+    comments: [{ id: 'c1', author: 'Kollege', text: 'Beleg fehlt', at: '2026-01-02T09:00:00.000Z' }],
+  }] });
+  assert.equal(s.tasks[0].assignee, 'Alex', 'Zustaendigkeit darf nicht auf Offen fallen');
+  assert.equal(s.tasks[0].author, 'Alex');
+  assert.equal(s.tasks[0].comments[0].author, 'Alex');
+});
+
+test('auch die alte Notiz und die Aktivitaet werden umgeschluesselt', () => {
+  const s = sanitizeBoard({
+    tasks: [{ id: 'n1', title: 'Alt', author: 'Kollege', note: 'Warte auf Freigabe',
+      createdAt: '2026-01-02T08:00:00.000Z', updatedAt: '2026-01-02T08:00:00.000Z' }],
+    activity: [{ id: 'e1', at: '2026-01-02T08:00:00.000Z', actor: 'Kollege', kind: 'angelegt', taskId: 'n1', title: 'Alt' }],
+  });
+  assert.equal(s.tasks[0].comments[0].author, 'Alex');
+  assert.equal(s.activity[0].actor, 'Alex');
+  assert.equal(activityText(s.activity[0]), 'Alex hat angelegt: Alt');
+});
+
+test('die Umschluesselung ist stabil: zweimal einlesen aendert nichts mehr', () => {
+  const roh = {
+    tasks: [{ id: 't1', title: 'A', assignee: 'Kollege', author: 'Kollege',
+      createdAt: '2026-01-02T08:00:00.000Z', updatedAt: '2026-01-02T08:00:00.000Z',
+      comments: [{ id: 'c1', author: 'Kollege', text: 'x', at: '2026-01-02T09:00:00.000Z' }] }],
+    activity: [{ id: 'e1', at: '2026-01-02T08:00:00.000Z', actor: 'Kollege', kind: 'angelegt', taskId: 't1', title: 'A' }],
+  };
+  const einmal = sanitizeBoard(roh);
+  assert.deepEqual(sanitizeBoard(einmal), einmal, 'sonst schriebe jedes Geraet die Datei endlos neu');
+});
+
+test('ein alter Stand mischt sich sauber mit einem neuen', () => {
+  const fern = sanitizeBoard({ tasks: [{ id: 't1', title: 'A', assignee: 'Kollege',
+    createdAt: '2026-01-02T08:00:00.000Z', updatedAt: '2026-01-02T08:00:00.000Z' }] });
+  const hier = sanitizeBoard({ tasks: [{ id: 't2', title: 'B', assignee: 'Aaron',
+    createdAt: '2026-01-02T09:00:00.000Z', updatedAt: '2026-01-02T09:00:00.000Z' }] });
+  const zusammen = mergeBoards(fern, hier);
+  assert.deepEqual(zusammen.tasks.map((t) => t.assignee).sort(), ['Aaron', 'Alex']);
+});
+
+test('Zustaendigkeitsfilter trennt Personen und Unzugeteiltes', () => {
+  const board = { tasks: [
+    mk('fuer mich', { assignee: 'JAHVIS' }, 1),
+    mk('fuer Alex', { assignee: 'Alex' }, 2),
+    mk('fuer Aaron', { assignee: 'Aaron' }, 3),
+    mk('fuer niemanden', { assignee: '' }, 4),
+  ] };
+  const titel = (a) => selectTasks(board, { assignee: a }).map((t) => t.title);
+  assert.deepEqual(titel('alle').length, 4);
+  assert.deepEqual(titel('Aaron'), ['fuer Aaron']);
+  assert.deepEqual(titel('Alex'), ['fuer Alex']);
+  assert.deepEqual(titel('offen'), ['fuer niemanden']);
+  assert.equal(matchesAssignee({ assignee: 'Kollege' }, 'Alex'), true, 'alter Name zaehlt zu Alex');
+});
+
+test('Zustaendigkeits- und Wichtigkeitsfilter greifen zusammen', () => {
+  const board = { tasks: [
+    mk('A', { assignee: 'Aaron', priority: 'hoch' }, 1),
+    mk('B', { assignee: 'Aaron', priority: 'niedrig' }, 2),
+    mk('C', { assignee: 'Alex', priority: 'hoch' }, 3),
+  ] };
+  assert.deepEqual(
+    selectTasks(board, { assignee: 'Aaron', priority: 'hoch' }).map((t) => t.title), ['A']);
 });
 
 console.log(`\n${passed} Tests bestanden.`);

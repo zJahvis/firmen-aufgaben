@@ -1,12 +1,15 @@
 # Firmen-Aufgaben
 
-Gemeinsame Aufgaben-Pinnwand für zwei Personen mit den drei Spalten
+Gemeinsame Aufgaben-Pinnwand für **JAHVIS, Alex und Aaron** mit den drei Spalten
 **Offen · Dran · Erledigt** – komplett auf Deutsch, mobiltauglich, PIN-geschützt
 und ohne einen einzigen kostenpflichtigen Dienst.
 
-* **Der Kollege** legt Aufgaben an (Titel + optionaler Link).
-* **JAHVIS** arbeitet sie ab, schreibt Notizen dazu und hakt sie ab.
-* Beide sehen dieselbe Pinnwand, auf jedem Gerät, in Echtzeit (Abgleich alle 10 Sekunden).
+* Jeder legt Aufgaben an (Titel + optionale Links) und teilt sie jemandem zu.
+* Wer dran ist, schreibt Kommentare dazu und hakt ab.
+* Alle sehen dieselbe Pinnwand, auf jedem Gerät, in Echtzeit (Abgleich alle 10 Sekunden).
+
+Eine neue Aufgabe gehört zunächst **niemandem**: Zuteilen ist eine bewusste
+Handlung, damit niemand ungefragt Arbeit auf den Tisch bekommt.
 
 Jede Aufgabe hat eine **Wichtigkeit** (*Hoch* / *Mittel* / *Niedrig*), optional eine
 **Frist**, eine **Zuständigkeit**, zwei getrennte **Links** und einen
@@ -35,7 +38,7 @@ Zwischenspeicher, damit die Pinnwand sofort sichtbar ist.
 |---|---|---|
 | `priority` | `hoch` / `mittel` / `niedrig` | `mittel` |
 | `due` | Frist als `JJJJ-MM-TT`, leer = keine | leer |
-| `assignee` | `JAHVIS`, `Kollege` oder leer (= offen) | leer |
+| `assignee` | `JAHVIS`, `Alex`, `Aaron` oder leer (= offen) | leer |
 | `author` | wer sie angelegt hat | unverändert |
 | `comments` | Verlauf aus `{id, author, text, at}` | die alte `note` wird zum ersten Kommentar |
 | `url` / `url2` | zwei getrennte Links, je mit eigener Beschriftung | leer |
@@ -43,9 +46,29 @@ Zwischenspeicher, damit die Pinnwand sofort sichtbar ist.
 | `archived` | im Archiv statt gelöscht | `false` |
 
 Zusätzlich führt `board.json` eine Liste `activity` mit den letzten 60 Ereignissen
-(„Kollege hat angelegt: …"). Alte Dateien brauchen keine Migration: Fehlende
+(„Alex hat angelegt: …"). Alte Dateien brauchen keine Migration: Fehlende
 Felder werden beim Laden mit den Vorgaben oben ergänzt, und zwar auf jedem Gerät
 gleich, damit daraus keine überflüssigen Schreibvorgänge entstehen.
+
+### Die drei Personen
+
+Die Namen stehen in `assets/board.js` in `PEOPLE`. Eine weitere Person kommt
+dazu, indem man sie dort einträgt und in `index.html` an drei Stellen ergänzt
+(Anlegen-Dialog, Bearbeiten-Dialog, „Wer bist du?"). Das Auswahlmenü für die
+Zuständigkeit und der Zuständigkeitsfilter bauen sich aus `ASSIGNEE_CHOICES`
+bzw. der Liste in der Werkzeugleiste auf.
+
+> **Aus „Kollege" wurde „Alex".** Aufgaben, Kommentare und Aktivitätseinträge
+> von vorher tragen noch den alten Namen. Die Umschlüsselung in `board.js`
+> (`personName`) übersetzt ihn beim Einlesen – bei der Zuständigkeit, beim
+> Urheber, bei den Kommentaren und in der Aktivität. Ohne sie hätten alle
+> Aufgaben von Alex still ihre Zuständigkeit verloren, denn `normalizeAssignee`
+> macht aus jedem unbekannten Namen ein „Offen".
+>
+> Die Umschlüsselung bleibt **dauerhaft** im Code, nicht nur für einen Durchlauf:
+> Ein alter Zwischenspeicher in irgendeinem Browser könnte den alten Namen sonst
+> jederzeit wieder einschleusen. Sie ist fest verdrahtet und damit auf jedem
+> Gerät gleich – daraus entsteht kein Hin-und-Her und keine Schreibschleife.
 
 ### Fristen
 
@@ -73,6 +96,9 @@ schreiben beide gleichzeitig, bleiben beide Beiträge erhalten.
 * **Nach Datum** – nach Anlage- bzw. Erledigungszeit.
 * **Wichtigkeitsfilter** *Alle / Hoch / Mittel / Niedrig*, der mit den Spalten
   Offen, Dran und Erledigt zusammen greift (z. B. nur Hoch + Offen).
+* **Zuständigkeitsfilter** *Alle / JAHVIS / Alex / Aaron / Offen* – greift mit
+  allen übrigen Filtern zusammen (z. B. nur Aarons hohe offene Aufgaben).
+  *Offen* zeigt genau das, was noch niemandem gehört.
 * **Suche** über Titel, Links, Beschriftungen, Namen und alle Kommentare;
   mehrere Wörter müssen alle passen.
 * **Erledigt ausblenden** nimmt die dritte Spalte samt Reiter aus der Ansicht.
@@ -139,7 +165,7 @@ eigene Beschriftung setzen.
 
 Gespeichert wird immer nach dem Muster *lesen → zusammenführen → schreiben*.
 Zusammengeführt wird **pro Aufgabe** anhand des Zeitstempels `updatedAt`,
-nicht pro Datei. Ändern beide Personen gleichzeitig verschiedene Aufgaben,
+nicht pro Datei. Ändern mehrere Personen gleichzeitig verschiedene Aufgaben,
 geht nichts verloren; bei einem Schreibkonflikt (HTTP 409) wird bis zu
 fünfmal automatisch neu zusammengeführt.
 
@@ -161,7 +187,7 @@ Die Seite `setup.html` führt Schritt für Schritt durch:
 3. Auf `setup.html` Repository, Token und die gewünschte PIN eintragen.
    Die Seite prüft den Zugang, legt `board.json` an, verschlüsselt den Token
    mit der PIN und gibt einen **Zugangslink** aus.
-4. Diesen Link an beide Personen schicken, die PIN getrennt davon mitteilen.
+4. Diesen Link an alle Beteiligten schicken, die PIN getrennt davon mitteilen.
 
 Nach dem ersten Öffnen merkt sich der Browser den verschlüsselten Zugang –
 ab dann genügt die normale Adresse plus PIN.

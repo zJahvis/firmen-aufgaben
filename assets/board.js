@@ -22,12 +22,33 @@ export const DEFAULT_PRIORITY = 'mittel';
 /** Hoch vor Mittel vor Niedrig. */
 const PRIORITY_RANK = { hoch: 0, mittel: 1, niedrig: 2 };
 
-export const PEOPLE = ['JAHVIS', 'Kollege'];
+export const PEOPLE = ['JAHVIS', 'Alex', 'Aaron'];
+
+/**
+ * Früher hieß Alex schlicht „Kollege". Alte Aufgaben, Kommentare und
+ * Aktivitätseinträge tragen diesen Namen noch. Die Umschlüsselung greift beim
+ * Einlesen und bleibt dauerhaft bestehen: Ein alter Zwischenspeicher in einem
+ * Browser könnte den alten Namen sonst jederzeit wieder einschleusen.
+ * Sie ist fest verdrahtet und damit auf jedem Gerät gleich – daraus entsteht
+ * kein Hin-und-Her zwischen zwei Geräten und keine Schreibschleife.
+ */
+const LEGACY_NAMES = { Kollege: 'Alex' };
+
+/** Übersetzt einen alten Namen; alles andere bleibt unverändert. */
+export function personName(value) {
+  const name = String(value || '');
+  return LEGACY_NAMES[name] || name;
+}
 
 /** Leer bedeutet: noch niemandem zugeteilt. */
-export const ASSIGNEE_LABELS = { '': 'Offen', JAHVIS: 'JAHVIS', Kollege: 'Kollege' };
-export const ASSIGNEE_CHOICES = ['JAHVIS', 'Kollege', ''];
-export const DEFAULT_ASSIGNEE = 'JAHVIS';
+export const ASSIGNEE_LABELS = { '': 'Offen', JAHVIS: 'JAHVIS', Alex: 'Alex', Aaron: 'Aaron' };
+export const ASSIGNEE_CHOICES = ['JAHVIS', 'Alex', 'Aaron', ''];
+
+/**
+ * Neue Aufgaben gehören zunächst niemandem. Bei drei Personen wäre eine feste
+ * Vorgabe eine stille Zuteilung an jemanden, der nichts davon weiß.
+ */
+export const DEFAULT_ASSIGNEE = '';
 
 /** 'wichtigkeit' sortiert nach Priorität, 'datum' nach Anlage- bzw. Erledigungszeit. */
 export const SORT_MODES = ['wichtigkeit', 'datum'];
@@ -57,7 +78,8 @@ export function normalizePriority(value) {
 }
 
 export function normalizeAssignee(value) {
-  return PEOPLE.includes(value) ? value : '';
+  const name = personName(value);
+  return PEOPLE.includes(name) ? name : '';
 }
 
 /* ------------------------------------------------------------------ */
@@ -212,7 +234,7 @@ export function addComment(task, { author, text, at = new Date().toISOString() }
   const zeit = letzter && at <= letzter.at
     ? new Date(Date.parse(letzter.at) + 1).toISOString()
     : at;
-  const comment = { id: newId(), author: String(author || ''), text: body, at: zeit };
+  const comment = { id: newId(), author: personName(author), text: body, at: zeit };
   return touch(task, { comments: [...bisher, comment] });
 }
 
@@ -222,7 +244,7 @@ function sanitizeComment(raw, fallbackAt) {
   if (!text.trim()) return null;
   return {
     id: raw.id,
-    author: typeof raw.author === 'string' ? raw.author : '',
+    author: personName(typeof raw.author === 'string' ? raw.author : ''),
     text,
     at: typeof raw.at === 'string' ? raw.at : fallbackAt,
   };
@@ -251,7 +273,7 @@ export function sanitizeTask(raw) {
   // dasselbe Ergebnis erzeugt und daraus keine Schreibschleife entsteht.
   const note = typeof raw.note === 'string' ? raw.note : '';
   if (!comments.length && note.trim()) {
-    comments.push({ id: `${raw.id}-notiz`, author: String(raw.author || ''), text: note, at: createdAt });
+    comments.push({ id: `${raw.id}-notiz`, author: personName(raw.author), text: note, at: createdAt });
   }
 
   return {
@@ -264,7 +286,7 @@ export function sanitizeTask(raw) {
     status: STATES.includes(raw.status) ? raw.status : 'offen',
     priority: normalizePriority(raw.priority),
     due: normalizeDue(raw.due),
-    author: typeof raw.author === 'string' ? raw.author : '',
+    author: personName(typeof raw.author === 'string' ? raw.author : ''),
     assignee: normalizeAssignee(raw.assignee),
     comments: sortComments(comments),
     order: Number.isFinite(raw.order) ? raw.order : (Date.parse(createdAt) || 0),
@@ -284,7 +306,7 @@ export function makeActivity(kind, task, actor, at = new Date().toISOString()) {
   return {
     id: newId(),
     at,
-    actor: String(actor || ''),
+    actor: personName(actor),
     kind: ACTIVITY_KINDS.includes(kind) ? kind : 'geaendert',
     taskId: task?.id || '',
     title: task?.title || '',
@@ -316,7 +338,7 @@ function sanitizeActivity(list) {
     clean.push({
       id: raw.id,
       at: raw.at,
-      actor: typeof raw.actor === 'string' ? raw.actor : '',
+      actor: personName(typeof raw.actor === 'string' ? raw.actor : ''),
       kind: ACTIVITY_KINDS.includes(raw.kind) ? raw.kind : 'geaendert',
       taskId: typeof raw.taskId === 'string' ? raw.taskId : '',
       title: typeof raw.title === 'string' ? raw.title : '',
@@ -426,15 +448,29 @@ export function matchesQuery(task, query) {
 }
 
 /**
- * Aufgaben einer Spalte. Status, Wichtigkeitsfilter, Suche und Sortierung
- * greifen zusammen; Archiviertes und Gelöschtes bleibt außen vor.
+ * Der Zuständigkeitsfilter kennt 'alle', einen Namen aus PEOPLE oder 'offen'
+ * für alles, was noch niemandem gehört.
  */
-export function selectTasks(board, { status, sort = DEFAULT_SORT, priority = 'alle', query = '' } = {}) {
+export function matchesAssignee(task, filter) {
+  if (filter === 'alle' || !filter) return true;
+  const wer = normalizeAssignee(task.assignee);
+  return filter === 'offen' ? wer === '' : wer === filter;
+}
+
+/**
+ * Aufgaben einer Spalte. Status, Wichtigkeits- und Zuständigkeitsfilter, Suche
+ * und Sortierung greifen zusammen; Archiviertes und Gelöschtes bleibt außen vor.
+ */
+export function selectTasks(
+  board,
+  { status, sort = DEFAULT_SORT, priority = 'alle', assignee = 'alle', query = '' } = {}
+) {
   const tasks = (board?.tasks || []).filter(
     (t) => !t.deleted
       && !t.archived
       && (!status || t.status === status)
       && (priority === 'alle' || normalizePriority(t.priority) === priority)
+      && matchesAssignee(t, assignee)
       && matchesQuery(t, query)
   );
   return sortTasks(tasks, sort);

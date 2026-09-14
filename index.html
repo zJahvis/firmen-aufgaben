@@ -130,11 +130,13 @@
           <div class="field">
             <label id="new-assignee-label">Zuständig</label>
             <div class="seg seg-wide" role="radiogroup" aria-labelledby="new-assignee-label">
-              <input type="radio" name="new-assignee" id="new-assignee-jahvis" value="JAHVIS" checked>
+              <input type="radio" name="new-assignee" id="new-assignee-jahvis" value="JAHVIS">
               <label for="new-assignee-jahvis">JAHVIS</label>
-              <input type="radio" name="new-assignee" id="new-assignee-kollege" value="Kollege">
-              <label for="new-assignee-kollege">Kollege</label>
-              <input type="radio" name="new-assignee" id="new-assignee-offen" value="">
+              <input type="radio" name="new-assignee" id="new-assignee-alex" value="Alex">
+              <label for="new-assignee-alex">Alex</label>
+              <input type="radio" name="new-assignee" id="new-assignee-aaron" value="Aaron">
+              <label for="new-assignee-aaron">Aaron</label>
+              <input type="radio" name="new-assignee" id="new-assignee-offen" value="" checked>
               <label for="new-assignee-offen">Offen</label>
             </div>
           </div>
@@ -167,6 +169,22 @@
             <label for="filter-prio-mittel">Mittel</label>
             <input type="radio" name="filter-prio" id="filter-prio-niedrig" value="niedrig">
             <label for="filter-prio-niedrig">Niedrig</label>
+          </div>
+        </div>
+
+        <div class="choice-row">
+          <span class="choice-label">Zuständig</span>
+          <div class="seg" role="radiogroup" aria-label="Nach Zuständigkeit filtern" id="filter-assignee-row">
+            <input type="radio" name="filter-assignee" id="filter-assignee-alle" value="alle" checked>
+            <label for="filter-assignee-alle">Alle</label>
+            <input type="radio" name="filter-assignee" id="filter-assignee-jahvis" value="JAHVIS">
+            <label for="filter-assignee-jahvis">JAHVIS</label>
+            <input type="radio" name="filter-assignee" id="filter-assignee-alex" value="Alex">
+            <label for="filter-assignee-alex">Alex</label>
+            <input type="radio" name="filter-assignee" id="filter-assignee-aaron" value="Aaron">
+            <label for="filter-assignee-aaron">Aaron</label>
+            <input type="radio" name="filter-assignee" id="filter-assignee-offen" value="offen">
+            <label for="filter-assignee-offen">Offen</label>
           </div>
         </div>
 
@@ -276,8 +294,10 @@
       <div class="seg seg-wide" role="radiogroup" aria-labelledby="edit-assignee-label">
         <input type="radio" name="edit-assignee" id="edit-assignee-jahvis" value="JAHVIS">
         <label for="edit-assignee-jahvis">JAHVIS</label>
-        <input type="radio" name="edit-assignee" id="edit-assignee-kollege" value="Kollege">
-        <label for="edit-assignee-kollege">Kollege</label>
+        <input type="radio" name="edit-assignee" id="edit-assignee-alex" value="Alex">
+        <label for="edit-assignee-alex">Alex</label>
+        <input type="radio" name="edit-assignee" id="edit-assignee-aaron" value="Aaron">
+        <label for="edit-assignee-aaron">Aaron</label>
         <input type="radio" name="edit-assignee" id="edit-assignee-offen" value="" checked>
         <label for="edit-assignee-offen">Offen</label>
       </div>
@@ -310,10 +330,19 @@
   <form method="dialog" class="dlg-body">
     <h2>Wer bist du?</h2>
     <p class="dlg-note">Das steht später bei den Aufgaben, Kommentaren und in der Aktivität dabei.</p>
-    <div class="dlg-actions" style="flex-direction:column;align-items:stretch">
+    <div class="dlg-actions dlg-actions-stack">
       <button class="btn btn-primary btn-block" value="JAHVIS">Ich bin JAHVIS</button>
-      <button class="btn btn-block" value="Kollege">Ich bin der Kollege</button>
+      <button class="btn btn-block" value="Alex">Ich bin Alex</button>
+      <button class="btn btn-block" value="Aaron">Ich bin Aaron</button>
     </div>
+  </form>
+</dialog>
+
+<dialog id="assignee-dialog">
+  <form method="dialog" class="dlg-body">
+    <h2>Wer ist zuständig?</h2>
+    <p class="dlg-note" id="assignee-task"></p>
+    <div class="dlg-actions dlg-actions-stack" id="assignee-choices"></div>
   </form>
 </dialog>
 

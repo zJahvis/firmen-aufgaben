@@ -84,7 +84,7 @@ const titles = (page, stack) => page.locator(`[data-stack="${stack}"] .card h3`)
 const karte = (page, stack, teil) =>
   page.locator(`[data-stack="${stack}"] .card`).filter({ hasText: teil });
 
-/** Schreibt direkt in die Attrappe – simuliert den Kollegen am anderen Gerät. */
+/** Schreibt direkt in die Attrappe – simuliert Alex oder Aaron am anderen Gerät. */
 function setRemote(mutate) {
   const data = board();
   mutate(data);
@@ -129,6 +129,20 @@ try {
     await page.fill('#pin-input', PIN);
     await page.click('#pin-submit');
     await page.waitForSelector('#app:not(.hidden)', { timeout: 15000 });
+
+    // Alle drei Personen stehen zur Wahl – und jede kann sich anmelden.
+    assert.deepEqual(
+      await page.locator('#who-dialog button').evaluateAll(
+        (els) => els
+          .map((el) => ({ text: el.textContent, y: el.getBoundingClientRect().top }))
+          .sort((a, b) => a.y - b.y)
+          .map((e) => e.text)),
+      ['Ich bin JAHVIS', 'Ich bin Alex', 'Ich bin Aaron'],
+      'auch hier zaehlt die sichtbare Reihenfolge');
+    await page.locator('#who-dialog button[value="Aaron"]').click();
+    await page.waitForFunction(() => document.querySelector('#who-chip').textContent.includes('Aaron'));
+
+    await page.locator('#who-chip').click();
     await page.locator('#who-dialog button[value="JAHVIS"]').click();
     await page.waitForFunction(() => document.querySelector('#who-chip').textContent.includes('JAHVIS'));
     await waitFor(() => fake.file !== null, 'Anlegen von board.json');
@@ -156,20 +170,20 @@ try {
     await page.locator('#new-more').evaluate((el) => { el.open = false; });
   });
 
-  await step('Aufgabe anlegen: Mittel, JAHVIS zustaendig, Eintrag in der Aktivitaet', async () => {
+  await step('Aufgabe anlegen: Mittel, noch niemandem zugeteilt, Eintrag in der Aktivitaet', async () => {
     await page.fill('#new-title', 'Angebot für Meier schreiben');
     await page.click('#new-form button[type=submit]');
     await waitFor(() => !!titled('Angebot für Meier schreiben'), 'Speichern der neuen Aufgabe');
     const t = titled('Angebot für Meier schreiben');
     assert.equal(t.priority, 'mittel');
-    assert.equal(t.assignee, 'JAHVIS');
+    assert.equal(t.assignee, '', 'neue Aufgaben gehoeren zunaechst niemandem');
     assert.equal(t.author, 'JAHVIS');
     assert.equal(t.status, 'offen');
     assert.deepEqual(t.comments, []);
     assert.equal(await page.locator('[data-stack="offen"] .card .prio').textContent(), 'Mittel');
     assert.match(
       await karte(page, 'offen', 'Angebot für Meier').locator('.assignee').textContent(),
-      /Zuständig: JAHVIS/
+      /Zuständig: Offen/
     );
     const eintrag = board().activity[0];
     assert.equal(eintrag.kind, 'angelegt');
@@ -269,14 +283,68 @@ try {
     await page.click('#search-clear');
   });
 
-  await step('Zustaendigkeit laesst sich auf der Karte weiterschalten', async () => {
+  await step('Zustaendigkeit laesst sich ueber das Menue setzen', async () => {
     const chip = karte(page, 'offen', 'Werkzeug bestellen').locator('.assignee');
     await chip.click();
-    await waitFor(() => titled('Werkzeug bestellen')?.assignee === 'Kollege', 'Wechsel auf Kollege');
-    assert.match(await chip.textContent(), /Zuständig: Kollege/);
+    await page.waitForSelector('#assignee-dialog[open]');
+    assert.equal(await page.locator('#assignee-task').textContent(), 'Werkzeug bestellen');
+    // Alle drei Personen plus "niemand" stehen zur Wahl.
+    assert.equal(await page.locator('#assignee-choices button').count(), 4);
+
+    // Sichtbare Reihenfolge, nicht nur die im Dokument: .dlg-actions dreht auf
+    // dem Telefon die Reihenfolge um, was bei einer Personenliste falsch waere.
+    const reihenfolge = await page.locator('#assignee-choices button').evaluateAll(
+      (els) => els
+        .map((el) => ({ text: el.textContent, y: el.getBoundingClientRect().top }))
+        .sort((a, b) => a.y - b.y)
+        .map((e) => e.text));
+    assert.deepEqual(reihenfolge, ['JAHVIS', 'Alex', 'Aaron', 'Niemand (offen)'],
+      'von oben nach unten wie in ASSIGNEE_CHOICES');
+
+    await page.locator('#assignee-choices button[value="Aaron"]').click();
+    await waitFor(() => titled('Werkzeug bestellen')?.assignee === 'Aaron', 'Wechsel auf Aaron');
+    assert.match(await chip.textContent(), /Zuständig: Aaron/);
+
+    // Abbrechen mit Escape darf die Zustaendigkeit nicht stillschweigend loeschen:
+    // ein leerer Rueckgabewert bedeutet Abbruch, nicht "niemand".
     await chip.click();
+    await page.waitForSelector('#assignee-dialog[open]');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('#assignee-dialog').open);
+    assert.equal(titled('Werkzeug bestellen').assignee, 'Aaron', 'Escape darf nichts aendern');
+
+    await chip.click();
+    await page.waitForSelector('#assignee-dialog[open]');
+    await page.locator('#assignee-choices button[value="__offen"]').click();
     await waitFor(() => titled('Werkzeug bestellen')?.assignee === '', 'Wechsel auf Offen');
     assert.match(await chip.textContent(), /Zuständig: Offen/);
+  });
+
+  await step('Zustaendigkeitsfilter blendet fremde Aufgaben aus', async () => {
+    const chip = karte(page, 'offen', 'Werkzeug bestellen').locator('.assignee');
+    await chip.click();
+    await page.waitForSelector('#assignee-dialog[open]');
+    await page.locator('#assignee-choices button[value="Alex"]').click();
+    await waitFor(() => titled('Werkzeug bestellen')?.assignee === 'Alex', 'auf Alex setzen');
+
+    await page.locator('label[for="filter-assignee-alex"]').click();
+    await page.waitForFunction(() =>
+      document.querySelectorAll('[data-stack="offen"] .card').length === 1);
+    assert.deepEqual(await titles(page, 'offen'), ['Werkzeug bestellen']);
+
+    await page.locator('label[for="filter-assignee-aaron"]').click();
+    await page.waitForFunction(() =>
+      document.querySelectorAll('[data-stack="offen"] .card').length === 0);
+
+    await page.locator('label[for="filter-assignee-alle"]').click();
+    await page.waitForFunction(() =>
+      document.querySelectorAll('[data-stack="offen"] .card').length > 1);
+
+    // zuruecksetzen, damit die folgenden Schritte alles sehen
+    await chip.click();
+    await page.waitForSelector('#assignee-dialog[open]');
+    await page.locator('#assignee-choices button[value="__offen"]').click();
+    await waitFor(() => titled('Werkzeug bestellen')?.assignee === '', 'zuruecksetzen');
   });
 
   await step('Reihenfolge innerhalb einer Wichtigkeit mit den Pfeilen', async () => {
@@ -362,7 +430,7 @@ try {
     assert.equal(await karte(page, 'offen', 'Heute anrufen').count(), 1);
   });
 
-  await step('alte Notiz des Kollegen wird zum ersten Kommentar', async () => {
+  await step('alte Notiz wird zum ersten Kommentar – und der Kollege heisst jetzt Alex', async () => {
     setRemote((data) => {
       data.tasks.push({
         // so sah eine Aufgabe vor dieser Erweiterung aus: nur note, kein comments
@@ -377,14 +445,16 @@ try {
     assert.match(await karteEl.locator('.prio').textContent(), /Mittel/, 'Wichtigkeit bekommt einen Vorgabewert');
     assert.match(await karteEl.locator('.assignee').textContent(), /Offen/, 'Zuständigkeit bleibt offen');
     assert.match(await karteEl.locator('button', { hasText: 'Kommentare' }).textContent(), /\(1\)/);
+    assert.match(await karteEl.locator('.note-author').textContent(), /Alex/,
+      'der alte Name wird beim Einlesen auf Alex umgeschluesselt');
   });
 
-  await step('Neues vom Kollegen erscheint als Zaehler und laesst sich abhaken', async () => {
+  await step('Neues von Alex erscheint als Zaehler und laesst sich abhaken', async () => {
     setRemote((data) => {
       // bewusst in der Zukunft: so sieht es aus, wenn die Uhr des anderen vorgeht
       const jetzt = new Date(Date.now() + 60000).toISOString();
       data.activity.unshift({
-        id: 'akt-neu', at: jetzt, actor: 'Kollege', kind: 'angelegt',
+        id: 'akt-neu', at: jetzt, actor: 'Alex', kind: 'angelegt',
         taskId: 'alt-1', title: 'Rechnung 4711 prüfen',
       });
     });
@@ -448,6 +518,46 @@ try {
     await wide.close();
   });
 
+  await step('wer sich frueher als „Kollege" angemeldet hat, ist jetzt Alex', async () => {
+    const gesichert = { file: fake.file, sha: fake.sha };
+    fake.file = JSON.stringify({
+      version: 2,
+      tasks: [{ id: 'k-1', title: 'Von Alex angelegt', url: '', note: '',
+        status: 'offen', author: 'Kollege', assignee: 'Kollege',
+        createdAt: '2026-01-02T09:00:00.000Z', updatedAt: '2026-01-02T09:00:00.000Z',
+        doneAt: null, deleted: false }],
+      // Eigene Aktivitaet – sie darf fuer ihn selbst nicht als „neu" zaehlen.
+      activity: [{ id: 'k-e1', at: new Date(Date.now() + 60000).toISOString(),
+        actor: 'Kollege', kind: 'angelegt', taskId: 'k-1', title: 'Von Alex angelegt' }],
+    });
+    fake.sha = 'sha-kollege';
+
+    const ctxK = await browser.newContext({ viewport: { width: 390, height: 900 } });
+    const pk = await ctxK.newPage();
+    await installFakeGithub(pk);
+    // So sah sein Browser vorher aus: alte Kennung im Speicher.
+    await pk.addInitScript(() => { localStorage.setItem('fa.me', 'Kollege'); });
+    await pk.goto(`${base}/index.html#c=${sealed}`);
+    await pk.fill('#pin-input', PIN);
+    await pk.click('#pin-submit');
+    await pk.waitForSelector('#app:not(.hidden)', { timeout: 15000 });
+
+    // Kein „Wer bist du?" mehr, und in der Kopfzeile steht der neue Name.
+    await pk.waitForFunction(() => document.querySelector('#who-chip').textContent.includes('Alex'));
+    assert.equal(await pk.evaluate(() => localStorage.getItem('fa.me')), 'Alex',
+      'der alte Name verschwindet aus dem Speicher');
+
+    await pk.waitForSelector('.card[data-id="k-1"]');
+    assert.match(await pk.locator('.card[data-id="k-1"] .assignee').textContent(),
+      /Zuständig: Alex/, 'die Zustaendigkeit darf nicht auf Offen fallen');
+    assert.ok(await pk.locator('#news-chip').isHidden(),
+      'die eigene Aktivitaet zaehlt nicht als neu');
+
+    await ctxK.close();
+    fake.file = gesichert.file;
+    fake.sha = gesichert.sha;
+  });
+
   await step('Pinnwand von vor dieser Erweiterung zeigt trotzdem einen Verlauf', async () => {
     const gesichert = { file: fake.file, sha: fake.sha };
     // Aufgaben und Notizen, aber kein Ereignisprotokoll – genau der gemeldete Fall.
@@ -474,8 +584,8 @@ try {
     await p4.waitForFunction(() => document.querySelectorAll('#activity-list li').length === 2);
     const zeilen = await p4.locator('#activity-list .activity-text').allTextContents();
     assert.deepEqual(zeilen, [
-      'Kollege hat kommentiert: Altbestand prüfen',
-      'Kollege hat angelegt: Altbestand prüfen',
+      'Alex hat kommentiert: Altbestand prüfen',
+      'Alex hat angelegt: Altbestand prüfen',
     ], 'der Verlauf wird aus den vorhandenen Daten abgeleitet');
     assert.ok(await p4.locator('#overview').isVisible(), 'die Übersicht bleibt sichtbar');
     assert.match(await p4.locator('#overview-empty-text').textContent(), /noch keine Aufgabe hat eine Frist/i);
