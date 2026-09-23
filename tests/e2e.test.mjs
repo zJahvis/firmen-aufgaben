@@ -41,12 +41,43 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
 // --- Attrappe der GitHub Contents API -------------------------------------
-const fake = { file: null, sha: null, writes: 0 };
+const fake = { file: null, sha: null, writes: 0, files: new Map() };
 const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
+
+/** Weitere Dateien neben board.json – die Bilder. */
+async function fakeOtherFile(route, req, pfad) {
+  const datei = fake.files.get(pfad);
+  if (req.method() === 'PUT') {
+    const body = JSON.parse(req.postData() || '{}');
+    if (datei && body.sha !== datei.sha) return route.fulfill({ status: 422, body: '{}' });
+    const neu = { bytes: Buffer.from(body.content, 'base64'), sha: 'sha-' + ++fake.writes };
+    fake.files.set(pfad, neu);
+    return route.fulfill({ status: 201, contentType: 'application/json',
+      body: JSON.stringify({ content: { sha: neu.sha } }) });
+  }
+  if (!datei) return route.fulfill({ status: 404, body: '{"message":"Not Found"}' });
+  if (req.method() === 'GET') {
+    if ((req.headers().accept || '').includes('raw')) {
+      // so wie GitHub: kein Bildtyp, nur „raw"
+      return route.fulfill({ status: 200, contentType: 'application/vnd.github.raw', body: datei.bytes });
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ sha: datei.sha, content: datei.bytes.toString('base64') }) });
+  }
+  if (req.method() === 'DELETE') {
+    const body = JSON.parse(req.postData() || '{}');
+    if (body.sha !== datei.sha) return route.fulfill({ status: 409, body: '{}' });
+    fake.files.delete(pfad);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  }
+  return route.fulfill({ status: 405, body: '{}' });
+}
 
 async function installFakeGithub(page) {
   await page.route('https://api.github.com/**', async (route) => {
     const req = route.request();
+    const pfad = decodeURIComponent(new URL(req.url()).pathname.split('/contents/')[1] || '');
+    if (pfad && pfad !== 'board.json') return fakeOtherFile(route, req, pfad);
     if (req.method() === 'GET') {
       if (fake.file === null) return route.fulfill({ status: 404, body: '{"message":"Not Found"}' });
       return route.fulfill({
@@ -84,7 +115,7 @@ const titles = (page, stack) => page.locator(`[data-stack="${stack}"] .card h3`)
 const karte = (page, stack, teil) =>
   page.locator(`[data-stack="${stack}"] .card`).filter({ hasText: teil });
 
-/** Schreibt direkt in die Attrappe – simuliert Alex oder Aaron am anderen Gerät. */
+/** Schreibt direkt in die Attrappe – simuliert Alex, Aaron oder Joe am anderen Gerät. */
 function setRemote(mutate) {
   const data = board();
   mutate(data);
@@ -130,17 +161,18 @@ try {
     await page.click('#pin-submit');
     await page.waitForSelector('#app:not(.hidden)', { timeout: 15000 });
 
-    // Alle drei Personen stehen zur Wahl – und jede kann sich anmelden.
+    // Alle vier Personen stehen zur Wahl – und jede kann sich anmelden.
     assert.deepEqual(
       await page.locator('#who-dialog button').evaluateAll(
         (els) => els
           .map((el) => ({ text: el.textContent, y: el.getBoundingClientRect().top }))
           .sort((a, b) => a.y - b.y)
           .map((e) => e.text)),
-      ['Ich bin JAHVIS', 'Ich bin Alex', 'Ich bin Aaron'],
+      ['Ich bin JAHVIS', 'Ich bin Alex', 'Ich bin Aaron', 'Ich bin Joe'],
       'auch hier zaehlt die sichtbare Reihenfolge');
-    await page.locator('#who-dialog button[value="Aaron"]').click();
-    await page.waitForFunction(() => document.querySelector('#who-chip').textContent.includes('Aaron'));
+    await page.locator('#who-dialog button[value="Joe"]').click();
+    await page.waitForFunction(() => document.querySelector('#who-chip').textContent.includes('Joe'));
+    assert.equal(await page.evaluate(() => localStorage.getItem('fa.me')), 'Joe');
 
     await page.locator('#who-chip').click();
     await page.locator('#who-dialog button[value="JAHVIS"]').click();
@@ -288,8 +320,8 @@ try {
     await chip.click();
     await page.waitForSelector('#assignee-dialog[open]');
     assert.equal(await page.locator('#assignee-task').textContent(), 'Werkzeug bestellen');
-    // Alle drei Personen plus "niemand" stehen zur Wahl.
-    assert.equal(await page.locator('#assignee-choices button').count(), 4);
+    // Alle vier Personen plus "niemand" stehen zur Wahl.
+    assert.equal(await page.locator('#assignee-choices button').count(), 5);
 
     // Sichtbare Reihenfolge, nicht nur die im Dokument: .dlg-actions dreht auf
     // dem Telefon die Reihenfolge um, was bei einer Personenliste falsch waere.
@@ -298,7 +330,7 @@ try {
         .map((el) => ({ text: el.textContent, y: el.getBoundingClientRect().top }))
         .sort((a, b) => a.y - b.y)
         .map((e) => e.text));
-    assert.deepEqual(reihenfolge, ['JAHVIS', 'Alex', 'Aaron', 'Niemand (offen)'],
+    assert.deepEqual(reihenfolge, ['JAHVIS', 'Alex', 'Aaron', 'Joe', 'Niemand (offen)'],
       'von oben nach unten wie in ASSIGNEE_CHOICES');
 
     await page.locator('#assignee-choices button[value="Aaron"]').click();
@@ -336,6 +368,10 @@ try {
     await page.waitForFunction(() =>
       document.querySelectorAll('[data-stack="offen"] .card').length === 0);
 
+    await page.locator('label[for="filter-assignee-joe"]').click();
+    await page.waitForFunction(() =>
+      document.querySelectorAll('[data-stack="offen"] .card').length === 0);
+
     await page.locator('label[for="filter-assignee-alle"]').click();
     await page.waitForFunction(() =>
       document.querySelectorAll('[data-stack="offen"] .card').length > 1);
@@ -345,6 +381,137 @@ try {
     await page.waitForSelector('#assignee-dialog[open]');
     await page.locator('#assignee-choices button[value="__offen"]').click();
     await waitFor(() => titled('Werkzeug bestellen')?.assignee === '', 'zuruecksetzen');
+  });
+
+  await step('Joe laesst sich zuteilen – im Menue und beim Bearbeiten', async () => {
+    const chip = karte(page, 'offen', 'Werkzeug bestellen').locator('.assignee');
+    await chip.click();
+    await page.waitForSelector('#assignee-dialog[open]');
+    await page.locator('#assignee-choices button[value="Joe"]').click();
+    await waitFor(() => titled('Werkzeug bestellen')?.assignee === 'Joe', 'Wechsel auf Joe');
+    assert.match(await chip.textContent(), /Zuständig: Joe/);
+
+    await page.locator('label[for="filter-assignee-joe"]').click();
+    await page.waitForFunction(() =>
+      document.querySelectorAll('[data-stack="offen"] .card').length === 1);
+    await page.locator('label[for="filter-assignee-alle"]').click();
+
+    await karte(page, 'offen', 'Werkzeug bestellen').locator('button', { hasText: 'Bearbeiten' }).click();
+    await page.waitForSelector('#edit-dialog[open]');
+    assert.ok(await page.locator('#edit-assignee-joe').isChecked(), 'Bearbeiten zeigt Joe an');
+    await page.locator('label[for="edit-assignee-offen"]').click();
+    await page.click('#edit-save');
+    await waitFor(() => titled('Werkzeug bestellen')?.assignee === '', 'zuruecksetzen');
+  });
+
+  /** Ein grosses Testbild, im Browser gemalt – so wie ein Handyfoto. */
+  const testbild = async (breite, hoehe, name) => {
+    const daten = await page.evaluate(([w, h]) => {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#B09060'; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#0A1C1E'; ctx.fillRect(0, 0, w / 2, h / 2);
+      return c.toDataURL('image/png').split(',')[1];
+    }, [breite, hoehe]);
+    return { name, mimeType: 'image/png', buffer: Buffer.from(daten, 'base64') };
+  };
+
+  await step('Bild an eine Aufgabe anhaengen – verkleinert, als eigene Datei', async () => {
+    const karteEl = karte(page, 'offen', 'Werkzeug bestellen');
+    await karteEl.locator('button', { hasText: 'Bilder (0)' }).click();
+    await page.waitForSelector('#images-dialog[open]');
+    assert.equal(await page.locator('#images-title').textContent(), 'Werkzeug bestellen');
+    assert.match(await page.locator('#gallery .empty').textContent(), /Noch keine Bilder/);
+
+    await page.setInputFiles('#images-input', await testbild(3000, 2000, 'werkbank.png'));
+    await waitFor(() => titled('Werkzeug bestellen')?.images?.length === 1, 'Bild in board.json');
+
+    const t = titled('Werkzeug bestellen');
+    const bild = t.images[0];
+    assert.equal(bild.name, 'werkbank.png');
+    assert.equal(bild.author, 'JAHVIS');
+    const pfad = `bilder/${t.id}/${bild.id}.jpg`;
+    assert.ok(fake.files.has(pfad), 'das Bild liegt als eigene Datei im Datenrepository');
+    const bytes = fake.files.get(pfad).bytes;
+    assert.equal(bytes[0], 0xFF, 'als JPEG gespeichert');
+    assert.equal(bytes[1], 0xD8, 'als JPEG gespeichert');
+    assert.ok(!fake.file.includes(bytes.toString('base64').slice(0, 40)), 'nicht in board.json eingebettet');
+    assert.equal(board().activity[0].kind, 'bild');
+
+    await page.waitForFunction(() => {
+      const img = document.querySelector('#gallery .gallery-item img');
+      return img && img.complete && img.naturalWidth > 0;
+    });
+    assert.deepEqual(
+      await page.locator('#gallery .gallery-item img').evaluate((img) => [img.naturalWidth, img.naturalHeight]),
+      [1600, 1067], 'lange Kante auf 1600 Pixel verkleinert');
+    assert.match(await page.locator('#images-status').textContent(), /Bild angehängt/);
+    assert.match(await page.locator('#gallery .note-author').textContent(), /JAHVIS/);
+    await page.click('#images-close');
+
+    await page.waitForFunction(() => document.querySelectorAll('.card .thumbs img').length === 1);
+    assert.match(await karteEl.locator('button', { hasText: 'Bilder' }).textContent(), /Bilder \(1\)/);
+    assert.match(await page.locator('#activity-list li .activity-text').first().textContent(),
+      /JAHVIS hat ein Bild angehängt: Werkzeug bestellen/);
+  });
+
+  await step('Klick aufs Vorschaubild oeffnet die Bilder', async () => {
+    await karte(page, 'offen', 'Werkzeug bestellen').locator('.thumb').first().click();
+    await page.waitForSelector('#images-dialog[open]');
+    assert.equal(await page.locator('#gallery .gallery-item').count(), 1);
+    assert.match(await page.locator('#gallery .gallery-open').getAttribute('href'), /^blob:/);
+    await page.click('#images-close');
+  });
+
+  await step('beim Anlegen lassen sich gleich Bilder mitgeben', async () => {
+    await page.fill('#new-title', 'Schaden dokumentieren');
+    await page.locator('#new-more summary').click();
+    await page.setInputFiles('#new-images', [
+      await testbild(800, 600, 'schaden-1.png'),
+      await testbild(600, 800, 'schaden-2.png'),
+    ]);
+    assert.match(await page.locator('#new-images-hint').textContent(), /2 Bilder ausgewählt/);
+    await page.click('#new-form button[type=submit]');
+    await waitFor(() => titled('Schaden dokumentieren')?.images?.length === 2, 'beide Bilder angehaengt');
+    assert.deepEqual(titled('Schaden dokumentieren').images.map((b) => b.name), ['schaden-1.png', 'schaden-2.png']);
+    await page.waitForFunction(() => /2 Bilder angehängt/.test(document.querySelector('#new-images-hint').textContent));
+    assert.equal(await page.locator('#new-images').evaluate((el) => el.files.length), 0, 'Auswahl ist geleert');
+    await page.locator('#new-more').evaluate((el) => { el.open = false; });
+    await page.waitForFunction(() => {
+      const card = [...document.querySelectorAll('.card')].find((c) => c.textContent.includes('Schaden dokumentieren'));
+      return card && card.querySelectorAll('.thumbs img').length === 2;
+    });
+  });
+
+  await step('ein Bild laesst sich wieder entfernen', async () => {
+    const t = titled('Schaden dokumentieren');
+    const weg = t.images[0];
+    const pfad = `bilder/${t.id}/${weg.id}.jpg`;
+    assert.ok(fake.files.has(pfad));
+
+    await karte(page, 'offen', 'Schaden dokumentieren').locator('button', { hasText: 'Bilder (2)' }).click();
+    await page.waitForSelector('#images-dialog[open]');
+    page.once('dialog', (d) => d.accept());
+    await page.locator(`#gallery .gallery-item[data-id="${weg.id}"] button`, { hasText: 'Entfernen' }).click();
+    await waitFor(() => titled('Schaden dokumentieren').images.find((b) => b.id === weg.id)?.removed === true,
+      'als entfernt gespeichert');
+    await waitFor(() => !fake.files.has(pfad), 'Datei im Datenrepository geloescht');
+    assert.equal(await page.locator('#gallery .gallery-item').count(), 1);
+    await page.click('#images-close');
+    assert.match(await karte(page, 'offen', 'Schaden dokumentieren')
+      .locator('button', { hasText: 'Bilder' }).textContent(), /Bilder \(1\)/);
+  });
+
+  await step('kein Bild? Dann eine klare Meldung statt eines stillen Fehlers', async () => {
+    await karte(page, 'offen', 'Werkzeug bestellen').locator('button', { hasText: 'Bilder' }).click();
+    await page.waitForSelector('#images-dialog[open]');
+    await page.setInputFiles('#images-input',
+      { name: 'kaputt.png', mimeType: 'image/png', buffer: Buffer.from('kein bild') });
+    await page.waitForFunction(() => /kaputt\.png/.test(document.querySelector('#images-status').textContent));
+    assert.match(await page.locator('#banner').textContent(), /Nicht alle Bilder/);
+    assert.equal(titled('Werkzeug bestellen').images.length, 1, 'nichts Kaputtes angehängt');
+    await page.click('#images-close');
   });
 
   await step('Reihenfolge innerhalb einer Wichtigkeit mit den Pfeilen', async () => {
@@ -466,10 +633,18 @@ try {
     assert.equal(await page.locator('.card[data-id="alt-1"] .flag-neu').count(), 0);
   });
 
-  await step('nach Neuladen bleibt alles erhalten', async () => {
+  await step('nach Neuladen bleibt alles erhalten – auch die Bilder', async () => {
     await page.reload();
     await page.waitForSelector('#app:not(.hidden)', { timeout: 15000 });
     await page.waitForSelector('.card[data-id="alt-1"]');
+    // Nach dem Neuladen ist kein Bild mehr im Speicher: es kommt aus dem Repository.
+    await page.waitForFunction(() => {
+      const imgs = [...document.querySelectorAll('.card .thumbs img')];
+      return imgs.length === 2 && imgs.every((img) => img.complete && img.naturalWidth > 0);
+    });
+    const typ = await page.evaluate(async () =>
+      (await fetch(document.querySelector('.card .thumbs img').src)).blob().then((b) => b.type));
+    assert.equal(typ, 'image/jpeg', 'sonst laedt „in voller Groesse oeffnen" die Datei herunter');
     assert.equal(await page.locator('#tabs button[data-tab="offen"]').getAttribute('aria-selected'), 'true');
     assert.equal(await page.locator('input[name="sort"]:checked').getAttribute('value'), 'wichtigkeit');
   });

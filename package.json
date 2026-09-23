@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Gemeinsame Aufgaben-Pinnwand fuer zwei Personen (Offen / Dran / Erledigt)",
+  "description": "Gemeinsame Aufgaben-Pinnwand fuer das Team (Offen / Dran / Erledigt)",
   "scripts": {
     "test": "node tests/board.test.mjs",
     "test:e2e": "node tests/e2e.test.mjs",

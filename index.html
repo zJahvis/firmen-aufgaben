@@ -136,9 +136,17 @@
               <label for="new-assignee-alex">Alex</label>
               <input type="radio" name="new-assignee" id="new-assignee-aaron" value="Aaron">
               <label for="new-assignee-aaron">Aaron</label>
+              <input type="radio" name="new-assignee" id="new-assignee-joe" value="Joe">
+              <label for="new-assignee-joe">Joe</label>
               <input type="radio" name="new-assignee" id="new-assignee-offen" value="" checked>
               <label for="new-assignee-offen">Offen</label>
             </div>
+          </div>
+          <div class="field field-full">
+            <span class="field-label">Bilder</span>
+            <input id="new-images" class="file-input" type="file" accept="image/*" multiple>
+            <label class="btn btn-sm file-pick" for="new-images">Bilder auswählen</label>
+            <span class="file-hint" id="new-images-hint">Fotos, Screenshots – werden verkleinert gespeichert.</span>
           </div>
         </div>
       </details>
@@ -183,6 +191,8 @@
             <label for="filter-assignee-alex">Alex</label>
             <input type="radio" name="filter-assignee" id="filter-assignee-aaron" value="Aaron">
             <label for="filter-assignee-aaron">Aaron</label>
+            <input type="radio" name="filter-assignee" id="filter-assignee-joe" value="Joe">
+            <label for="filter-assignee-joe">Joe</label>
             <input type="radio" name="filter-assignee" id="filter-assignee-offen" value="offen">
             <label for="filter-assignee-offen">Offen</label>
           </div>
@@ -298,6 +308,8 @@
         <label for="edit-assignee-alex">Alex</label>
         <input type="radio" name="edit-assignee" id="edit-assignee-aaron" value="Aaron">
         <label for="edit-assignee-aaron">Aaron</label>
+        <input type="radio" name="edit-assignee" id="edit-assignee-joe" value="Joe">
+        <label for="edit-assignee-joe">Joe</label>
         <input type="radio" name="edit-assignee" id="edit-assignee-offen" value="" checked>
         <label for="edit-assignee-offen">Offen</label>
       </div>
@@ -326,6 +338,19 @@
   </div>
 </dialog>
 
+<dialog id="images-dialog">
+  <div class="dlg-body">
+    <h2 id="images-title">Bilder</h2>
+    <ul class="gallery" id="gallery"></ul>
+    <p class="upload-status" id="images-status" role="status"></p>
+    <div class="dlg-actions">
+      <button class="btn" type="button" id="images-close">Schließen</button>
+      <input id="images-input" class="file-input" type="file" accept="image/*" multiple>
+      <label class="btn btn-primary" for="images-input" id="images-add">Bild anhängen</label>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="who-dialog">
   <form method="dialog" class="dlg-body">
     <h2>Wer bist du?</h2>
@@ -334,6 +359,7 @@
       <button class="btn btn-primary btn-block" value="JAHVIS">Ich bin JAHVIS</button>
       <button class="btn btn-block" value="Alex">Ich bin Alex</button>
       <button class="btn btn-block" value="Aaron">Ich bin Aaron</button>
+      <button class="btn btn-block" value="Joe">Ich bin Joe</button>
     </div>
   </form>
 </dialog>

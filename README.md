@@ -1,19 +1,19 @@
 # Firmen-Aufgaben
 
-Gemeinsame Aufgaben-Pinnwand für **JAHVIS, Alex und Aaron** mit den drei Spalten
+Gemeinsame Aufgaben-Pinnwand für **JAHVIS, Alex, Aaron und Joe** mit den drei Spalten
 **Offen · Dran · Erledigt** – komplett auf Deutsch, mobiltauglich, PIN-geschützt
 und ohne einen einzigen kostenpflichtigen Dienst.
 
 * Jeder legt Aufgaben an (Titel + optionale Links) und teilt sie jemandem zu.
-* Wer dran ist, schreibt Kommentare dazu und hakt ab.
+* Wer dran ist, schreibt Kommentare dazu, hängt Fotos an und hakt ab.
 * Alle sehen dieselbe Pinnwand, auf jedem Gerät, in Echtzeit (Abgleich alle 10 Sekunden).
 
 Eine neue Aufgabe gehört zunächst **niemandem**: Zuteilen ist eine bewusste
 Handlung, damit niemand ungefragt Arbeit auf den Tisch bekommt.
 
 Jede Aufgabe hat eine **Wichtigkeit** (*Hoch* / *Mittel* / *Niedrig*), optional eine
-**Frist**, eine **Zuständigkeit**, zwei getrennte **Links** und einen
-**Kommentarverlauf**.
+**Frist**, eine **Zuständigkeit**, zwei getrennte **Links**, einen
+**Kommentarverlauf** und beliebig viele **Bilder**.
 
 ---
 
@@ -38,9 +38,10 @@ Zwischenspeicher, damit die Pinnwand sofort sichtbar ist.
 |---|---|---|
 | `priority` | `hoch` / `mittel` / `niedrig` | `mittel` |
 | `due` | Frist als `JJJJ-MM-TT`, leer = keine | leer |
-| `assignee` | `JAHVIS`, `Alex`, `Aaron` oder leer (= offen) | leer |
+| `assignee` | `JAHVIS`, `Alex`, `Aaron`, `Joe` oder leer (= offen) | leer |
 | `author` | wer sie angelegt hat | unverändert |
 | `comments` | Verlauf aus `{id, author, text, at}` | die alte `note` wird zum ersten Kommentar |
+| `images` | angehängte Bilder als `{id, name, author, at, removed}` | leer |
 | `url` / `url2` | zwei getrennte Links, je mit eigener Beschriftung | leer |
 | `order` | Reihenfolge von Hand innerhalb einer Wichtigkeit | Anlagezeitpunkt |
 | `archived` | im Archiv statt gelöscht | `false` |
@@ -50,13 +51,14 @@ Zusätzlich führt `board.json` eine Liste `activity` mit den letzten 60 Ereigni
 Felder werden beim Laden mit den Vorgaben oben ergänzt, und zwar auf jedem Gerät
 gleich, damit daraus keine überflüssigen Schreibvorgänge entstehen.
 
-### Die drei Personen
+### Die vier Personen
 
-Die Namen stehen in `assets/board.js` in `PEOPLE`. Eine weitere Person kommt
-dazu, indem man sie dort einträgt und in `index.html` an drei Stellen ergänzt
-(Anlegen-Dialog, Bearbeiten-Dialog, „Wer bist du?"). Das Auswahlmenü für die
-Zuständigkeit und der Zuständigkeitsfilter bauen sich aus `ASSIGNEE_CHOICES`
-bzw. der Liste in der Werkzeugleiste auf.
+Die Namen stehen in `assets/board.js` in `PEOPLE`, `ASSIGNEE_LABELS` und
+`ASSIGNEE_CHOICES`. Eine weitere Person kommt dazu, indem man sie dort einträgt
+und in `index.html` an vier Stellen ergänzt (Anlegen-Dialog, Bearbeiten-Dialog,
+Zuständigkeitsfilter in der Werkzeugleiste, „Wer bist du?"). Das Auswahlmenü
+auf der Karte baut sich aus `ASSIGNEE_CHOICES` von selbst auf. Zuletzt ist so
+**Joe** dazugekommen.
 
 > **Aus „Kollege" wurde „Alex".** Aufgaben, Kommentare und Aktivitätseinträge
 > von vorher tragen noch den alten Namen. Die Umschlüsselung in `board.js`
@@ -69,6 +71,33 @@ bzw. der Liste in der Werkzeugleiste auf.
 > Ein alter Zwischenspeicher in irgendeinem Browser könnte den alten Namen sonst
 > jederzeit wieder einschleusen. Sie ist fest verdrahtet und damit auf jedem
 > Gerät gleich – daraus entsteht kein Hin-und-Her und keine Schreibschleife.
+
+### Bilder
+
+An jede Aufgabe lassen sich Fotos und Screenshots hängen – über *Bilder (N)*
+auf der Karte oder gleich beim Anlegen unter „Weitere Angaben". Auf dem Handy
+bietet der Browser dabei auch die Kamera an. Die ersten drei Bilder stehen als
+Vorschau auf der Karte; ein Klick öffnet alle, von dort aus in voller Größe.
+
+* **Verkleinert:** Vor dem Hochladen wird jedes Bild im Browser auf höchstens
+  1600 Pixel an der langen Kante gebracht und als JPEG gespeichert. Aus einem
+  5-MB-Handyfoto werden so ein paar hundert KB.
+* **Eigene Dateien:** Bilder liegen im Datenrepository unter
+  `bilder/<Aufgabe>/<Bild>.jpg` neben `board.json`, nicht darin. `board.json`
+  merkt sich nur, welche es gibt – der Abgleich alle 10 Sekunden bleibt damit
+  klein, und Bilder werden nur geladen, wenn sie zu sehen sind (je Sitzung einmal).
+* **Erst hochladen, dann anhängen:** Der Eintrag in der Aufgabe entsteht erst,
+  wenn die Datei sicher gespeichert ist. Kein Gerät sieht je ein Bild, das es
+  noch nicht gibt.
+* **Zusammenführen:** Wie Kommentare werden Bilder vereinigt, nicht ersetzt.
+  Entfernen hinterlässt einen Eintrag „entfernt", damit ein älterer Stand das
+  Bild nicht wiederbelebt; die Datei selbst wird im Repository gelöscht (in der
+  Git-Historie bleibt sie erhalten).
+
+> **Grenze:** Das Datenrepository ist privat, deshalb lädt die Seite Bilder über
+> die GitHub-API mit dem Token statt über eine direkte Adresse. Ein Bild lässt
+> sich darum nicht als Link an Außenstehende weitergeben – nur innerhalb der
+> Pinnwand ansehen.
 
 ### Fristen
 
@@ -96,10 +125,11 @@ schreiben beide gleichzeitig, bleiben beide Beiträge erhalten.
 * **Nach Datum** – nach Anlage- bzw. Erledigungszeit.
 * **Wichtigkeitsfilter** *Alle / Hoch / Mittel / Niedrig*, der mit den Spalten
   Offen, Dran und Erledigt zusammen greift (z. B. nur Hoch + Offen).
-* **Zuständigkeitsfilter** *Alle / JAHVIS / Alex / Aaron / Offen* – greift mit
+* **Zuständigkeitsfilter** *Alle / JAHVIS / Alex / Aaron / Joe / Offen* – greift mit
   allen übrigen Filtern zusammen (z. B. nur Aarons hohe offene Aufgaben).
   *Offen* zeigt genau das, was noch niemandem gehört.
-* **Suche** über Titel, Links, Beschriftungen, Namen und alle Kommentare;
+* **Suche** über Titel, Links, Beschriftungen, Namen, alle Kommentare und
+  Bildnamen;
   mehrere Wörter müssen alle passen.
 * **Erledigt ausblenden** nimmt die dritte Spalte samt Reiter aus der Ansicht.
 
@@ -169,8 +199,8 @@ nicht pro Datei. Ändern mehrere Personen gleichzeitig verschiedene Aufgaben,
 geht nichts verloren; bei einem Schreibkonflikt (HTTP 409) wird bis zu
 fünfmal automatisch neu zusammengeführt.
 
-Zwei Dinge sind davon ausgenommen, weil sie Verläufe sind und kein Zustand:
-**Kommentare** und die **Aktivität** werden vereinigt statt ersetzt.
+Drei Dinge sind davon ausgenommen, weil sie Verläufe sind und kein Zustand:
+**Kommentare**, **Bilder** und die **Aktivität** werden vereinigt statt ersetzt.
 
 ---
 
@@ -250,7 +280,7 @@ index.html        Pinnwand inkl. PIN-Anmeldung
 setup.html        einmalige Einrichtung
 assets/app.js     Oberfläche, Aktionen, Abgleich
 assets/board.js   Datenmodell und Merge-Logik (ohne DOM, testbar)
-assets/store.js   GitHub Contents API als Datenspeicher
+assets/store.js   GitHub Contents API als Datenspeicher (board.json und Bilder)
 assets/crypto.js  PBKDF2 + AES-GCM
 assets/style.css  Gestaltung, hell und dunkel
 assets/fonts.css  selbst gehostete Schriften (erzeugt, nicht von Hand ändern)

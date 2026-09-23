@@ -7,7 +7,7 @@ import {
   PRIORITY_LABELS, DEFAULT_PRIORITY, normalizePriority,
   ASSIGNEE_LABELS, ASSIGNEE_CHOICES, DEFAULT_ASSIGNEE, normalizeAssignee, PEOPLE, personName,
   SORT_MODES, DEFAULT_SORT, todayIso, dueLabel, dueState, formatDate,
-  orderForIndex,
+  orderForIndex, newId, imagePath, visibleImages, addImage, removeImage,
 } from './board.js';
 
 const LS_CONFIG = 'fa.config';   // verschlüsseltes Zugangspaket
@@ -170,6 +170,7 @@ function wireUi() {
     ev.preventDefault();
     const title = $('#new-title').value.trim();
     if (!title) return;
+    const bilder = [...($('#new-images').files || [])];
     const task = createTask({
       title,
       url: $('#new-url').value,
@@ -190,9 +191,19 @@ function wireUi() {
     $('#new-due').value = '';
     setChoice('new-prio', DEFAULT_PRIORITY);
     setChoice('new-assignee', DEFAULT_ASSIGNEE);
+    $('#new-images').value = '';
+    $('#new-images-hint').textContent = NEW_IMAGES_HINT;
     $('#new-title').focus();
     cacheAndRender();
     scheduleSave();
+    if (bilder.length) attachImages(task.id, bilder, (text) => { $('#new-images-hint').textContent = text; });
+  });
+
+  $('#new-images').addEventListener('change', (ev) => {
+    const n = ev.target.files?.length || 0;
+    $('#new-images-hint').textContent = n
+      ? `${n === 1 ? '1 Bild' : `${n} Bilder`} ausgewählt – wird beim Hinzufügen angehängt.`
+      : NEW_IMAGES_HINT;
   });
 
   $('#search').addEventListener('input', (ev) => {
@@ -287,6 +298,15 @@ function wireUi() {
     const wer = val === ASSIGNEE_NONE ? '' : val;
     if (!ASSIGNEE_CHOICES.includes(wer)) return;
     updateTask(id, { assignee: wer }, 'geaendert');
+  });
+
+  $('#images-close').addEventListener('click', () => $('#images-dialog').close());
+  $('#images-dialog').addEventListener('close', () => { imagesId = null; });
+  $('#images-input').addEventListener('change', (ev) => {
+    const dateien = [...(ev.target.files || [])];
+    ev.target.value = '';
+    if (!imagesId || !dateien.length) return;
+    attachImages(imagesId, dateien, (text) => { $('#images-status').textContent = text; });
   });
 
   $('#comments-close').addEventListener('click', () => $('#comments-dialog').close());
@@ -452,6 +472,7 @@ function render() {
   }
 
   renderArchive(neu);
+  if (imagesId) renderGallery(imagesId);
   renderOverview();
   renderActivity();
   renderNews();
@@ -568,6 +589,31 @@ function renderCard(task, neu) {
   }
   if (links.childElementCount) card.append(links);
 
+  const bilder = visibleImages(task);
+  if (bilder.length) {
+    const leiste = document.createElement('div');
+    leiste.className = 'thumbs';
+    for (const bild of bilder.slice(0, 3)) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'thumb';
+      b.title = 'Bilder ansehen';
+      b.append(imageElement(task, bild));
+      b.addEventListener('click', () => openImages(task.id));
+      leiste.append(b);
+    }
+    if (bilder.length > 3) {
+      const rest = document.createElement('button');
+      rest.type = 'button';
+      rest.className = 'thumb thumb-more';
+      rest.textContent = `+${bilder.length - 3}`;
+      rest.title = 'Alle Bilder ansehen';
+      rest.addEventListener('click', () => openImages(task.id));
+      leiste.append(rest);
+    }
+    card.append(leiste);
+  }
+
   const zuständig = document.createElement('button');
   zuständig.type = 'button';
   zuständig.className = `assignee assignee-${normalizeAssignee(task.assignee) || 'offen'}`;
@@ -618,6 +664,7 @@ function renderCard(task, neu) {
   if (task.archived) {
     add(actions, 'Wiederherstellen', 'btn-primary', () => setArchived(task.id, false));
     add(more, `Kommentare (${task.comments.length})`, 'btn-ghost', () => openComments(task.id));
+    if (bilder.length) add(more, `Bilder (${bilder.length})`, 'btn-ghost', () => openImages(task.id));
     add(more, 'Endgültig löschen', 'btn-ghost btn-danger', () => removeForever(task.id));
     card.append(actions, more);
     return card;
@@ -634,6 +681,7 @@ function renderCard(task, neu) {
   }
 
   add(more, `Kommentare (${task.comments.length})`, 'btn-ghost', () => openComments(task.id));
+  add(more, `Bilder (${bilder.length})`, 'btn-ghost', () => openImages(task.id));
   add(more, 'Bearbeiten', 'btn-ghost', () => openEdit(task.id));
   add(more, 'Archivieren', 'btn-ghost', () => setArchived(task.id, true));
 
@@ -767,6 +815,232 @@ function renderThread(id) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Bilder                                                              */
+/* ------------------------------------------------------------------ */
+
+// Fotos vom Handy haben schnell 5 MB und mehr. Verkleinert auf 1600 Pixel an
+// der langen Kante bleiben davon ein paar hundert KB – gut lesbar, und das
+// Datenrepository wächst nicht unnötig.
+const IMAGE_MAX_EDGE = 1600;
+const IMAGE_QUALITY = 0.82;
+const IMAGE_MAX_BYTES = 25 * 1024 * 1024;
+const IMAGE_RETRY_MS = 60000;
+const NEW_IMAGES_HINT = 'Fotos, Screenshots – werden verkleinert gespeichert.';
+
+let imagesId = null;
+/** Pfad -> Objekt-URL. Bilder werden je Sitzung nur einmal geladen. */
+const imageUrls = new Map();
+/** Pfad -> laufender Ladevorgang bzw. Zeitpunkt des letzten Fehlschlags. */
+const imageLoads = new Map();
+
+function loadImageUrl(taskId, bild) {
+  const pfad = imagePath(taskId, bild.id);
+  if (imageUrls.has(pfad)) return Promise.resolve(imageUrls.get(pfad));
+  const laufend = imageLoads.get(pfad);
+  if (laufend instanceof Promise) return laufend;
+  // Nach einem Fehlschlag nicht bei jedem Abgleich neu anfragen.
+  if (typeof laufend === 'number' && Date.now() - laufend < IMAGE_RETRY_MS) {
+    return Promise.reject(new Error('Bild nicht verfügbar'));
+  }
+  const p = state.store.readFile(pfad).then((blob) => {
+    // GitHub liefert „application/vnd.github.raw" – ohne richtigen Typ würde
+    // „in voller Größe öffnen" die Datei herunterladen statt sie zu zeigen.
+    const url = URL.createObjectURL(new Blob([blob], { type: 'image/jpeg' }));
+    imageUrls.set(pfad, url);
+    imageLoads.delete(pfad);
+    return url;
+  }, (err) => {
+    imageLoads.set(pfad, Date.now());
+    throw err;
+  });
+  imageLoads.set(pfad, p);
+  return p;
+}
+
+function imageElement(task, bild) {
+  const img = document.createElement('img');
+  img.alt = bild.name || 'Bild';
+  img.decoding = 'async';
+  const fertig = imageUrls.get(imagePath(task.id, bild.id));
+  if (fertig) {
+    img.src = fertig;
+  } else {
+    img.classList.add('is-loading');
+    loadImageUrl(task.id, bild).then((url) => {
+      img.src = url;
+      img.classList.remove('is-loading');
+    }, () => {
+      img.classList.remove('is-loading');
+      img.classList.add('is-broken');
+      img.alt = 'Bild konnte nicht geladen werden';
+    });
+  }
+  return img;
+}
+
+function openImages(id) {
+  imagesId = id;
+  $('#images-status').textContent = '';
+  renderGallery(id);
+  const dlg = $('#images-dialog');
+  if (!dlg.open) dlg.showModal();
+}
+
+function renderGallery(id) {
+  const task = state.board.tasks.find((t) => t.id === id);
+  if (!task) return;
+  $('#images-title').textContent = task.title || 'Bilder';
+  const liste = $('#gallery');
+  const bilder = visibleImages(task);
+  if (!bilder.length) {
+    const leer = document.createElement('li');
+    leer.className = 'empty';
+    leer.textContent = 'Noch keine Bilder. Fotos vom Handy oder Screenshots lassen sich hier anhängen.';
+    liste.replaceChildren(leer);
+    return;
+  }
+  liste.replaceChildren(...bilder.map((bild) => {
+    const li = document.createElement('li');
+    li.className = 'gallery-item';
+    li.dataset.id = bild.id;
+
+    const ansehen = document.createElement('a');
+    ansehen.className = 'gallery-open';
+    ansehen.target = '_blank';
+    ansehen.rel = 'noopener';
+    ansehen.title = 'In voller Größe öffnen';
+    const img = imageElement(task, bild);
+    ansehen.append(img);
+    loadImageUrl(task.id, bild).then((url) => { ansehen.href = url; }, () => {});
+
+    const unter = document.createElement('div');
+    unter.className = 'gallery-caption';
+    const wer = document.createElement('span');
+    wer.className = 'note-author';
+    wer.textContent = `${bild.author || 'Jemand'} · ${relativeDate(bild.at)}`;
+    const name = document.createElement('span');
+    name.className = 'gallery-name';
+    name.textContent = bild.name;
+    const weg = document.createElement('button');
+    weg.type = 'button';
+    weg.className = 'btn btn-ghost btn-sm btn-danger';
+    weg.textContent = 'Entfernen';
+    weg.addEventListener('click', () => removeImageFromTask(task.id, bild.id));
+    unter.append(wer, name, weg);
+
+    li.append(ansehen, unter);
+    return li;
+  }));
+}
+
+/** Liest eine Bilddatei; HTMLImageElement als Rückfall für ältere Browser. */
+async function decodeImage(file) {
+  if (typeof createImageBitmap === 'function') {
+    try { return await createImageBitmap(file); } catch { /* Rückfall unten */ }
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return img;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** Verkleinert ein Bild und speichert es einheitlich als JPEG. */
+async function prepareImage(file) {
+  const name = file.name || 'Bild';
+  if (file.type && !file.type.startsWith('image/')) throw new Error(`„${name}" ist kein Bild.`);
+  if (file.size > IMAGE_MAX_BYTES) throw new Error(`„${name}" ist größer als 25 MB.`);
+  let quelle;
+  try {
+    quelle = await decodeImage(file);
+  } catch {
+    throw new Error(`„${name}" kann dieser Browser nicht als Bild lesen.`);
+  }
+  const breite = quelle.width || quelle.naturalWidth;
+  const höhe = quelle.height || quelle.naturalHeight;
+  const faktor = Math.min(1, IMAGE_MAX_EDGE / Math.max(breite, höhe));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(breite * faktor));
+  canvas.height = Math.max(1, Math.round(höhe * faktor));
+  const ctx = canvas.getContext('2d');
+  // JPEG kennt keine Transparenz – ohne weißen Grund würde sie schwarz.
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(quelle, 0, 0, canvas.width, canvas.height);
+  quelle.close?.();
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error(`„${name}" ließ sich nicht umwandeln.`))),
+      'image/jpeg',
+      IMAGE_QUALITY
+    );
+  });
+}
+
+async function blobToBase64(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(bin);
+}
+
+/**
+ * Lädt Bilder nacheinander hoch und hängt sie erst danach an die Aufgabe –
+ * so zeigt die Pinnwand nie auf eine Datei, die es (noch) nicht gibt.
+ */
+async function attachImages(taskId, dateien, melden) {
+  let fertig = 0;
+  const fehler = [];
+  for (const [i, datei] of dateien.entries()) {
+    melden(dateien.length > 1 ? `Lade Bild ${i + 1} von ${dateien.length} hoch …` : 'Lade Bild hoch …');
+    setSync('busy', 'lädt Bild hoch …');
+    try {
+      const blob = await prepareImage(datei);
+      const id = newId();
+      const pfad = imagePath(taskId, id);
+      await state.store.writeFile(pfad, await blobToBase64(blob), `Bild angehängt (${new Date().toISOString()})`);
+      imageUrls.set(pfad, URL.createObjectURL(blob));
+      mutateTask(taskId, (t) => addImage(t, {
+        id, name: datei.name || '', author: state.me || 'Unbekannt',
+      }), 'bild');
+      fertig++;
+    } catch (err) {
+      fehler.push(err.message);
+    }
+  }
+  if (!fehler.length) {
+    melden(fertig === 1 ? 'Bild angehängt.' : `${fertig} Bilder angehängt.`);
+    return;
+  }
+  const text = `${fertig} von ${dateien.length} angehängt. ${fehler[0]}`;
+  melden(text);
+  showBanner('Nicht alle Bilder wurden angehängt: ' + fehler.join(' '));
+  // Ohne ein einziges fertiges Bild folgt kein Speichern, das die Anzeige zurücksetzt.
+  if (!fertig) setSync('error', 'Bild nicht hochgeladen');
+}
+
+function removeImageFromTask(taskId, bildId) {
+  if (!confirm('Dieses Bild entfernen?')) return;
+  mutateTask(taskId, (t) => removeImage(t, bildId), 'geaendert');
+  deleteImageFile(taskId, bildId);
+}
+
+/** Aufräumen im Datenrepository – schlägt es fehl, bleibt nur eine verwaiste Datei. */
+function deleteImageFile(taskId, bildId) {
+  const pfad = imagePath(taskId, bildId);
+  const url = imageUrls.get(pfad);
+  if (url) URL.revokeObjectURL(url);
+  imageUrls.delete(pfad);
+  state.store.deleteFile(pfad, `Bild entfernt (${new Date().toISOString()})`).catch(() => {});
+}
+
+/* ------------------------------------------------------------------ */
 /* Bearbeiten                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -844,10 +1118,11 @@ function removeForever(id) {
   if (!task) return;
   if (!confirm(`„${task.title}" endgültig löschen? Das lässt sich nicht rückgängig machen.`)) return;
   updateTask(id, { deleted: true }, null);
+  for (const bild of visibleImages(task)) deleteImageFile(id, bild.id);
 }
 
 /**
- * Bei drei Personen wäre Durchschalten vier Klicks bis zurück zum Anfang.
+ * Bei vier Personen wäre Durchschalten fünf Klicks bis zurück zum Anfang.
  * Deshalb ein Auswahlmenü: ein Klick, eine Entscheidung.
  */
 function openAssignee(id) {

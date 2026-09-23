@@ -6,6 +6,7 @@ import {
   PRIORITIES, PRIORITY_LABELS, DEFAULT_PRIORITY, normalizePriority, normalizeAssignee,
   todayIso, daysUntil, dueState, dueLabel, formatDate, normalizeDue,
   orderBetween, orderForIndex, personName, matchesAssignee, PEOPLE, DEFAULT_ASSIGNEE,
+  ASSIGNEE_CHOICES, ASSIGNEE_LABELS, addImage, removeImage, visibleImages, imagePath,
 } from '../assets/board.js';
 
 let passed = 0;
@@ -396,10 +397,20 @@ test('sanitizeBoard repariert kaputte Daten', () => {
   assert.deepEqual(s.activity, []);
 });
 
-/* ---------------- Drei Personen und die Umschluesselung ---------------- */
+/* ---------------- Vier Personen und die Umschluesselung ---------------- */
 
-test('die Pinnwand kennt JAHVIS, Alex und Aaron', () => {
-  assert.deepEqual(PEOPLE, ['JAHVIS', 'Alex', 'Aaron']);
+test('die Pinnwand kennt JAHVIS, Alex, Aaron und Joe', () => {
+  assert.deepEqual(PEOPLE, ['JAHVIS', 'Alex', 'Aaron', 'Joe']);
+});
+
+test('Joe laesst sich zuteilen und herausfiltern', () => {
+  assert.deepEqual(ASSIGNEE_CHOICES, ['JAHVIS', 'Alex', 'Aaron', 'Joe', '']);
+  assert.equal(ASSIGNEE_LABELS.Joe, 'Joe');
+  assert.equal(normalizeAssignee('Joe'), 'Joe');
+  const board = { tasks: [mk('fuer Joe', { assignee: 'Joe' }, 1), mk('fuer Aaron', { assignee: 'Aaron' }, 2)] };
+  assert.deepEqual(selectTasks(board, { assignee: 'Joe' }).map((t) => t.title), ['fuer Joe']);
+  const t = sanitizeBoard({ tasks: [{ id: 'j', title: 'X', assignee: 'Joe', author: 'Joe' }] }).tasks[0];
+  assert.equal(t.assignee, 'Joe', 'Joe darf beim Einlesen nicht auf Offen fallen');
 });
 
 test('neue Aufgaben gehoeren zunaechst niemandem', () => {
@@ -485,6 +496,90 @@ test('Zustaendigkeits- und Wichtigkeitsfilter greifen zusammen', () => {
   ] };
   assert.deepEqual(
     selectTasks(board, { assignee: 'Aaron', priority: 'hoch' }).map((t) => t.title), ['A']);
+});
+
+/* ---------------- Bilder ---------------- */
+
+const bildZeit = (minute) => new Date(Date.UTC(2026, 8, 2, 9, minute)).toISOString();
+
+test('alte Aufgaben ohne Bilder bekommen eine leere Liste', () => {
+  const t = sanitizeBoard({ tasks: [{ id: 'a', title: 'Alt' }] }).tasks[0];
+  assert.deepEqual(t.images, []);
+  assert.deepEqual(createTask({ title: 'Neu' }).images, []);
+});
+
+test('addImage haengt an, doppelt nicht und uebersetzt den Namen', () => {
+  let t = mk('Foto');
+  t = addImage(t, { id: 'b1', name: 'baustelle.jpg', author: 'Kollege', at: bildZeit(1) });
+  t = addImage(t, { id: 'b1', name: 'nochmal.jpg', author: 'Joe', at: bildZeit(2) });
+  assert.equal(t.images.length, 1);
+  assert.equal(t.images[0].author, 'Alex');
+  assert.equal(t.images[0].name, 'baustelle.jpg');
+  assert.ok(t.updatedAt > bildZeit(0), 'Anhaengen zaehlt als Aenderung');
+});
+
+test('ungueltige Bildkennungen werden verworfen', () => {
+  const t = sanitizeBoard({ tasks: [{ id: 'a', title: 'X', images: [
+    { id: '../../board', name: 'boese' }, { id: 'ok-1', name: 'gut' }, { name: 'ohne id' },
+  ] }] }).tasks[0];
+  assert.deepEqual(t.images.map((b) => b.id), ['ok-1']);
+  assert.equal(addImage(t, { id: 'a/b', author: 'Joe' }), t);
+});
+
+test('imagePath bleibt im Bilder-Ordner', () => {
+  assert.equal(imagePath('t-1', 'b-1'), 'bilder/t-1/b-1.jpg');
+  assert.equal(imagePath('../x', '../../y'), 'bilder/___x/______y.jpg');
+});
+
+test('removeImage blendet aus, laesst aber einen Eintrag stehen', () => {
+  let t = addImage(mk('Foto'), { id: 'b1', name: 'a.jpg', author: 'Joe', at: bildZeit(1) });
+  t = removeImage(t, 'b1');
+  assert.equal(t.images.length, 1);
+  assert.equal(t.images[0].removed, true);
+  assert.deepEqual(visibleImages(t), []);
+  assert.equal(removeImage(t, 'b1'), t, 'zweimal entfernen aendert nichts');
+});
+
+test('gleichzeitig angehaengte Bilder bleiben beim Zusammenfuehren beide erhalten', () => {
+  const basis = mk('Foto');
+  const hier = addImage(basis, { id: 'b-hier', name: 'hier.jpg', author: 'JAHVIS', at: bildZeit(1) });
+  const dort = { ...addImage(basis, { id: 'b-dort', name: 'dort.jpg', author: 'Joe', at: bildZeit(2) }),
+    updatedAt: '2030-01-01T00:00:00.000Z', title: 'Foto (umbenannt)' };
+  const zusammen = mergeBoards({ tasks: [dort] }, { tasks: [hier] }).tasks[0];
+  assert.deepEqual(zusammen.images.map((b) => b.id), ['b-hier', 'b-dort']);
+  assert.equal(zusammen.title, 'Foto (umbenannt)', 'sonst gewinnt weiter der juengere Stand');
+});
+
+test('ein entferntes Bild kommt beim Zusammenfuehren nicht zurueck', () => {
+  const mitBild = addImage(mk('Foto'), { id: 'b1', name: 'a.jpg', author: 'Joe', at: bildZeit(1) });
+  const entfernt = removeImage(mitBild, 'b1');
+  // Der alte Stand ist absichtlich der juengere – entfernt muss trotzdem gewinnen.
+  const alt = { ...mitBild, updatedAt: '2030-01-01T00:00:00.000Z' };
+  for (const [a, b] of [[alt, entfernt], [entfernt, alt]]) {
+    const zusammen = mergeBoards({ tasks: [a] }, { tasks: [b] }).tasks[0];
+    assert.deepEqual(visibleImages(zusammen), []);
+  }
+});
+
+test('Zusammenfuehren ohne neue Bilder erzeugt keinen Unterschied', () => {
+  const t = addImage(mk('Foto'), { id: 'b1', name: 'a.jpg', author: 'Joe', at: bildZeit(1) });
+  const board = sanitizeBoard({ tasks: [t] });
+  const zusammen = mergeBoards(board, sanitizeBoard(JSON.parse(JSON.stringify(board))));
+  assert.equal(JSON.stringify(zusammen), JSON.stringify(mergeBoards(board, board)),
+    'sonst schriebe jeder Abgleich die Datei neu');
+});
+
+test('Bildnamen sind durchsuchbar, entfernte nicht', () => {
+  let t = addImage(mk('Foto'), { id: 'b1', name: 'Rohrbruch-Keller.jpg', author: 'Joe', at: bildZeit(1) });
+  assert.ok(matchesQuery(t, 'rohrbruch'));
+  t = removeImage(t, 'b1');
+  assert.ok(!matchesQuery(t, 'rohrbruch'));
+});
+
+test('Aktivitaet kennt das Anhaengen eines Bildes', () => {
+  const e = makeActivity('bild', { id: 't', title: 'Dach' }, 'Joe');
+  assert.equal(e.kind, 'bild');
+  assert.equal(activityText(e), 'Joe hat ein Bild angehängt: Dach');
 });
 
 console.log(`\n${passed} Tests bestanden.`);

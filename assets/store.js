@@ -17,10 +17,20 @@ export class GithubStore {
   }
 
   get fileUrl() {
-    return `${API}/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(this.repo)}/contents/${this.path
+    return this.urlFor(this.path);
+  }
+
+  urlFor(path) {
+    return `${API}/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(this.repo)}/contents/${path
       .split('/')
       .map(encodeURIComponent)
       .join('/')}`;
+  }
+
+  /** Weitere Dateien (Bilder) liegen im selben Ordner wie board.json. */
+  siblingPath(rel) {
+    const i = this.path.lastIndexOf('/');
+    return i < 0 ? rel : this.path.slice(0, i + 1) + rel;
   }
 
   headers(extra = {}) {
@@ -77,6 +87,59 @@ export class GithubStore {
     if (!res.ok) throw new Error(`Speichern fehlgeschlagen (HTTP ${res.status})`);
     const json = await res.json();
     return { sha: json.content.sha };
+  }
+
+  /**
+   * Legt eine Binärdatei (base64) neu an. Jede Datei ist ein eigener Commit;
+   * kommt ein gleichzeitiges Speichern der Pinnwand dazwischen, meldet GitHub
+   * einen Konflikt – dann einfach noch einmal.
+   */
+  async writeFile(rel, base64, message) {
+    const body = JSON.stringify({ message, content: base64, branch: this.branch });
+    for (let versuch = 0; ; versuch++) {
+      const res = await this.request(this.urlFor(this.siblingPath(rel)), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+      if (res.ok) return;
+      if (res.status === 409 && versuch < 4) {
+        await new Promise((r) => setTimeout(r, 400 * (versuch + 1)));
+        continue;
+      }
+      if (res.status === 413) throw new Error('Das Bild ist zu groß.');
+      throw new Error(`Hochladen fehlgeschlagen (HTTP ${res.status})`);
+    }
+  }
+
+  /** Lädt eine Datei als Blob – das Repository ist privat, ein <img src> ginge nicht. */
+  async readFile(rel) {
+    const res = await this.request(
+      `${this.urlFor(this.siblingPath(rel))}?ref=${encodeURIComponent(this.branch)}`,
+      { headers: { Accept: 'application/vnd.github.raw' } }
+    );
+    if (res.status === 404) throw new Error('Bild nicht gefunden.');
+    if (!res.ok) throw new Error(`Bild laden fehlgeschlagen (HTTP ${res.status})`);
+    return res.blob();
+  }
+
+  /** Löscht eine Datei. Gibt es sie nicht (mehr), ist das kein Fehler. */
+  async deleteFile(rel, message) {
+    const url = this.urlFor(this.siblingPath(rel));
+    for (let versuch = 0; ; versuch++) {
+      const info = await this.request(`${url}?ref=${encodeURIComponent(this.branch)}`);
+      if (info.status === 404) return;
+      if (!info.ok) throw new Error(`Löschen fehlgeschlagen (HTTP ${info.status})`);
+      const { sha } = await info.json();
+      const res = await this.request(url, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, sha, branch: this.branch }),
+      });
+      if (res.ok || res.status === 404) return;
+      if (res.status === 409 && versuch < 4) continue;
+      throw new Error(`Löschen fehlgeschlagen (HTTP ${res.status})`);
+    }
   }
 
   /** Prüft Zugang und Standard-Branch; wird beim Einrichten benutzt. */

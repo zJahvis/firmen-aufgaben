@@ -22,7 +22,7 @@ export const DEFAULT_PRIORITY = 'mittel';
 /** Hoch vor Mittel vor Niedrig. */
 const PRIORITY_RANK = { hoch: 0, mittel: 1, niedrig: 2 };
 
-export const PEOPLE = ['JAHVIS', 'Alex', 'Aaron'];
+export const PEOPLE = ['JAHVIS', 'Alex', 'Aaron', 'Joe'];
 
 /**
  * Früher hieß Alex schlicht „Kollege". Alte Aufgaben, Kommentare und
@@ -41,11 +41,11 @@ export function personName(value) {
 }
 
 /** Leer bedeutet: noch niemandem zugeteilt. */
-export const ASSIGNEE_LABELS = { '': 'Offen', JAHVIS: 'JAHVIS', Alex: 'Alex', Aaron: 'Aaron' };
-export const ASSIGNEE_CHOICES = ['JAHVIS', 'Alex', 'Aaron', ''];
+export const ASSIGNEE_LABELS = { '': 'Offen', JAHVIS: 'JAHVIS', Alex: 'Alex', Aaron: 'Aaron', Joe: 'Joe' };
+export const ASSIGNEE_CHOICES = ['JAHVIS', 'Alex', 'Aaron', 'Joe', ''];
 
 /**
- * Neue Aufgaben gehören zunächst niemandem. Bei drei Personen wäre eine feste
+ * Neue Aufgaben gehören zunächst niemandem. Bei mehreren Personen wäre eine feste
  * Vorgabe eine stille Zuteilung an jemanden, der nichts davon weiß.
  */
 export const DEFAULT_ASSIGNEE = '';
@@ -56,7 +56,7 @@ export const DEFAULT_SORT = 'wichtigkeit';
 
 export const ACTIVITY_KINDS = [
   'angelegt', 'offen', 'dran', 'erledigt',
-  'kommentiert', 'geaendert', 'archiviert', 'wiederhergestellt',
+  'kommentiert', 'geaendert', 'archiviert', 'wiederhergestellt', 'bild',
 ];
 
 export const BOARD_VERSION = 2;
@@ -254,6 +254,62 @@ function sortComments(list) {
   return [...list].sort((a, b) => (a.at === b.at ? a.id.localeCompare(b.id) : a.at.localeCompare(b.at)));
 }
 
+/* ------------------------------------------------------------------ */
+/* Bilder                                                              */
+/* ------------------------------------------------------------------ */
+
+// Bilder liegen nicht in board.json, sondern als eigene Dateien im
+// Datenrepository. Die Aufgabe merkt sich nur, welche es gibt. So bleibt
+// board.json klein, und der Abgleich alle 10 Sekunden lädt keine Bilder mit.
+
+const IMAGE_ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
+
+/** Dateiname im Datenrepository, relativ zum Ordner von board.json. */
+export function imagePath(taskId, imageId) {
+  const sauber = (s) => String(s || '').replace(/[^A-Za-z0-9_-]/g, '_');
+  return `bilder/${sauber(taskId)}/${sauber(imageId)}.jpg`;
+}
+
+function sanitizeImage(raw, fallbackAt) {
+  if (!raw || typeof raw.id !== 'string' || !IMAGE_ID_RE.test(raw.id)) return null;
+  return {
+    id: raw.id,
+    name: typeof raw.name === 'string' ? raw.name.slice(0, 200) : '',
+    author: personName(typeof raw.author === 'string' ? raw.author : ''),
+    at: typeof raw.at === 'string' ? raw.at : fallbackAt,
+    removed: raw.removed === true,
+  };
+}
+
+function sortImages(list) {
+  return [...list].sort((a, b) => (a.at === b.at ? a.id.localeCompare(b.id) : a.at.localeCompare(b.at)));
+}
+
+/** Angehängte Bilder ohne die entfernten. */
+export function visibleImages(task) {
+  return (task?.images || []).filter((b) => !b.removed);
+}
+
+/** Hängt ein bereits hochgeladenes Bild an die Aufgabe an. */
+export function addImage(task, { id, name = '', author, at = new Date().toISOString() }) {
+  if (!IMAGE_ID_RE.test(String(id || ''))) return task;
+  if ((task.images || []).some((b) => b.id === id)) return task;
+  const bild = { id, name: String(name), author: personName(author), at, removed: false };
+  return touch(task, { images: [...(task.images || []), bild] });
+}
+
+/**
+ * Entfernt ein Bild. Der Eintrag bleibt als „entfernt" stehen: Beim
+ * Zusammenführen würde ein schlicht gelöschter Eintrag vom anderen Stand
+ * sonst sofort wiederbelebt.
+ */
+export function removeImage(task, id) {
+  if (!visibleImages(task).some((b) => b.id === id)) return task;
+  return touch(task, {
+    images: task.images.map((b) => (b.id === id ? { ...b, removed: true } : b)),
+  });
+}
+
 export function sanitizeTask(raw) {
   if (!raw || typeof raw.id !== 'string') return null;
   const createdAt = raw.createdAt || new Date(0).toISOString();
@@ -289,6 +345,7 @@ export function sanitizeTask(raw) {
     author: personName(typeof raw.author === 'string' ? raw.author : ''),
     assignee: normalizeAssignee(raw.assignee),
     comments: sortComments(comments),
+    images: sortImages(sanitizeImages(raw.images, createdAt)),
     order: Number.isFinite(raw.order) ? raw.order : (Date.parse(createdAt) || 0),
     archived: raw.archived === true,
     createdAt,
@@ -296,6 +353,19 @@ export function sanitizeTask(raw) {
     doneAt: raw.doneAt || null,
     deleted: raw.deleted === true,
   };
+}
+
+function sanitizeImages(list, fallbackAt) {
+  const seen = new Set();
+  const out = [];
+  for (const entry of Array.isArray(list) ? list : []) {
+    const clean = sanitizeImage(entry, fallbackAt);
+    if (clean && !seen.has(clean.id)) {
+      seen.add(clean.id);
+      out.push(clean);
+    }
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -322,6 +392,7 @@ const ACTIVITY_TEXT = {
   geaendert: 'hat geändert',
   archiviert: 'hat archiviert',
   wiederhergestellt: 'hat wiederhergestellt',
+  bild: 'hat ein Bild angehängt',
 };
 
 export function activityText(entry) {
@@ -360,16 +431,29 @@ function unionComments(a = [], b = []) {
   return sortComments([...byId.values()]);
 }
 
+/** Wie bei Kommentaren: vereinigen. Entfernt gewinnt – sonst käme ein Bild zurück. */
+function unionImages(a = [], b = []) {
+  const byId = new Map();
+  for (const bild of [...a, ...b]) {
+    const da = byId.get(bild.id);
+    byId.set(bild.id, da && !da.removed && bild.removed ? bild : (da || bild));
+  }
+  return sortImages([...byId.values()]);
+}
+
 function newerTask(a, b) {
   if (!a) return b;
   if (!b) return a;
   const base = a.updatedAt === b.updatedAt
     ? (a.deleted || a.archived ? a : b)
     : (a.updatedAt > b.updatedAt ? a : b);
-  // Kommentare sind ein Verlauf: hier zählt die Vereinigung, nicht der
-  // jüngere Stand – sonst gingen gleichzeitige Beiträge verloren.
+  // Kommentare und Bilder sind ein Verlauf: hier zählt die Vereinigung, nicht
+  // der jüngere Stand – sonst gingen gleichzeitige Beiträge verloren.
   const comments = unionComments(a.comments, b.comments);
-  return comments.length === base.comments.length ? base : { ...base, comments };
+  const images = unionImages(a.images, b.images);
+  const gleich = comments.length === base.comments.length
+    && JSON.stringify(images) === JSON.stringify(base.images || []);
+  return gleich ? base : { ...base, comments, images };
 }
 
 /**
@@ -443,6 +527,7 @@ export function matchesQuery(task, query) {
     task.url2, task.linkTitle2,
     task.author, task.assignee,
     ...(task.comments || []).map((c) => `${c.author} ${c.text}`),
+    ...visibleImages(task).map((b) => b.name),
   ].join(' ').toLowerCase();
   return q.split(/\s+/).every((word) => haystack.includes(word));
 }
