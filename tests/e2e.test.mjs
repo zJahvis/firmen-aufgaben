@@ -193,6 +193,29 @@ try {
     assert.ok(await page.locator('#activity-empty').isVisible());
   });
 
+  await step('Einladen zeigt den Zugangslink, der bei anderen die PIN-Abfrage oeffnet', async () => {
+    await page.click('#invite-open');
+    await page.waitForSelector('#invite-dialog[open]');
+    const link = await page.locator('#invite-link').inputValue();
+    assert.equal(link, `${base}/index.html#c=${sealed}`);
+    assert.ok(!link.includes(PIN), 'die PIN steht nicht im Link');
+    await page.click('#invite-copy');
+    await page.waitForFunction(() => /kopiert/.test(document.querySelector('#invite-status').textContent));
+    await page.click('#invite-close');
+
+    // Ein fremder Browser ohne gespeicherten Zugang: mit dem Link PIN-Abfrage statt Einrichtung.
+    const fremd = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const pf = await fremd.newPage();
+    await installFakeGithub(pf);
+    await pf.goto(link);
+    await pf.waitForSelector('#pin-input');
+    assert.ok(await pf.locator('#gate-setup').isHidden(), 'keine Einrichtung');
+    await pf.fill('#pin-input', PIN);
+    await pf.click('#pin-submit');
+    await pf.waitForSelector('#app:not(.hidden)', { timeout: 15000 });
+    await fremd.close();
+  });
+
   await step('„Frist eintragen" klappt die weiteren Angaben auf', async () => {
     assert.equal(await page.locator('#new-more').evaluate((el) => el.open), false);
     await page.click('#overview-set-due');

@@ -222,6 +222,12 @@ Die Seite `setup.html` führt Schritt für Schritt durch:
 Nach dem ersten Öffnen merkt sich der Browser den verschlüsselten Zugang –
 ab dann genügt die normale Adresse plus PIN.
 
+**Später jemanden dazuholen:** In der Pinnwand auf *Einladen* tippen. Das zeigt
+den Zugangslink zum Kopieren oder Teilen. Die normale Adresse allein reicht
+dafür nicht: Ein neuer Browser kennt den verschlüsselten Zugang noch nicht und
+landet sonst bei der Einrichtung. Die PIN steht nicht im Link und wird getrennt
+mitgeteilt.
+
 ---
 
 ## Sicherheit – ehrlich betrachtet

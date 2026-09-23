@@ -1169,6 +1169,9 @@ img.is-broken { visibility: hidden; }
 .upload-status { margin: 10px 0 0; min-height: 20px; font-size: 13.5px; color: var(--text-soft); }
 .upload-status:empty { display: none; }
 
+/* ---------- Einladen ---------- */
+.invite-link { font-size: 12.5px; word-break: break-all; resize: none; }
+
 /* ---------- Weniger Bewegung ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

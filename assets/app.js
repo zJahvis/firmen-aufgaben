@@ -300,6 +300,23 @@ function wireUi() {
     updateTask(id, { assignee: wer }, 'geaendert');
   });
 
+  $('#invite-open').addEventListener('click', openInvite);
+  $('#invite-close').addEventListener('click', () => $('#invite-dialog').close());
+  $('#invite-copy').addEventListener('click', async () => {
+    const feld = $('#invite-link');
+    try {
+      await navigator.clipboard.writeText(feld.value);
+    } catch {
+      // Ohne Zwischenablage-Recht: markieren, damit man selbst kopieren kann.
+      feld.select();
+      document.execCommand?.('copy');
+    }
+    $('#invite-status').textContent = 'Link kopiert. Die PIN bitte getrennt schicken.';
+  });
+  $('#invite-share').addEventListener('click', () => {
+    navigator.share({ title: 'Aufgaben – Winter Media', url: $('#invite-link').value }).catch(() => {});
+  });
+
   $('#images-close').addEventListener('click', () => $('#images-dialog').close());
   $('#images-dialog').addEventListener('close', () => { imagesId = null; });
   $('#images-input').addEventListener('change', (ev) => {
@@ -318,6 +335,24 @@ function wireUi() {
     $('#comment-text').value = '';
     renderThread(commentingId);
   });
+}
+
+/**
+ * Der Zugangslink enthält nur das verschlüsselte Zugangspaket, das dieser
+ * Browser ohnehin gespeichert hat – ohne PIN ist er wertlos. Die normale
+ * Adresse allein genügt nicht: Ein fremder Browser kennt das Paket noch nicht
+ * und landet deshalb bei der Einrichtung.
+ */
+function inviteLink(sealed, where = location) {
+  return `${where.origin}${where.pathname}#c=${sealed}`;
+}
+
+function openInvite() {
+  $('#invite-link').value = inviteLink(localStorage.getItem(LS_CONFIG) || '');
+  $('#invite-status').textContent = '';
+  $('#invite-share').classList.toggle('hidden', typeof navigator.share !== 'function');
+  $('#invite-dialog').showModal();
+  $('#invite-link').select();
 }
 
 function askWho() {

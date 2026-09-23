@@ -214,6 +214,7 @@
             <span>Erledigt ausblenden</span>
           </label>
           <button type="button" class="btn btn-sm" id="archive-toggle" aria-pressed="false">Archiv</button>
+          <button type="button" class="btn btn-sm" id="invite-open">Einladen</button>
         </div>
       </div>
     </section>
@@ -347,6 +348,21 @@
       <button class="btn" type="button" id="images-close">Schließen</button>
       <input id="images-input" class="file-input" type="file" accept="image/*" multiple>
       <label class="btn btn-primary" for="images-input" id="images-add">Bild anhängen</label>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="invite-dialog">
+  <div class="dlg-body">
+    <h2>Jemanden einladen</h2>
+    <p class="dlg-note">Diesen Link schicken – und die PIN <strong>getrennt</strong> davon, etwa mündlich oder per SMS.
+      Wer nur eins von beiden hat, kommt nicht hinein. Die PIN steht nicht im Link.</p>
+    <textarea id="invite-link" class="invite-link" readonly rows="4" aria-label="Zugangslink"></textarea>
+    <p class="upload-status" id="invite-status" role="status"></p>
+    <div class="dlg-actions">
+      <button class="btn" type="button" id="invite-close">Schließen</button>
+      <button class="btn hidden" type="button" id="invite-share">Teilen …</button>
+      <button class="btn btn-primary" type="button" id="invite-copy">Link kopieren</button>
     </div>
   </div>
 </dialog>
